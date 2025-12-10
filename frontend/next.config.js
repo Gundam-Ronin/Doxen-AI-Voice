@@ -17,7 +17,6 @@ const nextConfig = {
       },
     ];
   },
-  allowedHosts: ['all'],
 };
 
 module.exports = nextConfig;
