@@ -1,0 +1,286 @@
+1. SYSTEM OVERVIEW (High-Level Architecture)
+The platform consists of:
+A. FastAPI Backend (Python)
+Handles:
+•	Twilio inbound voice webhooks
+•	OpenAI Realtime AI logic
+•	Business-specific knowledgebase retrieval
+•	Appointment booking (Google Calendar)
+•	Technician dispatch via SMS
+•	Multi-tenant business settings
+•	Stripe billing webhooks
+•	Real-time transcript streaming via SSE
+B. Next.js Frontend (React + TailwindCSS)
+Displays:
+•	Real-time call transcripts
+•	Call logs
+•	Business settings
+•	Knowledgebase editor
+•	Personality editor
+•	Technician management
+•	Analytics dashboard
+•	Onboarding wizard
+UI: Glassmorphic Apple × Meta design.
+C. Third-Party Integrations
+•	Twilio (Voice webhook + SMS dispatch + number provisioning)
+•	OpenAI Realtime API (Voice reasoning engine)
+•	Pinecone/Qdrant (Vector search for knowledgebase)
+•	Google Calendar API (Appointment scheduling)
+•	Stripe (Subscription billing + webhooks)
+D. Database
+•	PostgreSQL for business data, users, logs
+•	Redis for caching and message queues (optional but recommended)
+________________________________________
+⚙️ 2. BACKEND STRUCTURE (FastAPI)
+Backend Folder Structure
+/app
+   /core
+      ai_engine.py
+      call_manager.py
+      vector_search.py
+      calendar.py
+      dispatcher.py
+      personality.py
+      routing.py
+      voicemail.py
+      fallback.py
+   /routers
+      twilio_router.py
+      api_router.py
+      knowledgebase_router.py
+      appointments.py
+      billing.py
+      stream_router.py  (SSE)
+   /database
+      models.py
+      session.py
+   main.py
+________________________________________
+🧠 3. CORE BACKEND MODULES (Purpose)
+ai_engine.py
+•	Handles OpenAI Realtime requests
+•	Generates AI responses
+•	Applies business-specific personality rules
+•	Detects language (EN/ES)
+call_manager.py
+•	Main call flow logic
+•	Receives transcript chunks from Twilio
+•	Sends responses back
+•	Pushes real-time transcripts → SSE
+vector_search.py
+•	Embeds KB documents
+•	Uses Pinecone/Qdrant to retrieve relevant info for AI
+calendar.py
+•	Google Calendar service for booking appointments
+•	Lists availability
+•	Creates events
+dispatcher.py
+•	Sends SMS to technicians
+•	Handles emergency routing
+personality.py
+•	Loads AI personality per business (tone, rules, templates)
+routing.py
+•	After-hours detection
+•	Overflow logic
+•	Health fallback logic
+voicemail.py
+•	Summarizes voicemails using OpenAI
+•	Creates structured summaries
+fallback.py
+•	Detects if OpenAI or backend is down
+•	Uses backup routing
+________________________________________
+📡 4. ROUTERS (Backend API Endpoints)
+twilio_router.py
+Endpoints:
+•	/twilio/voice — receives inbound calls
+•	/twilio/status — call states
+•	/twilio/sms — dispatch replies
+stream_router.py (SSE)
+•	/transcripts
+Streams real-time transcript text → frontend dashboard.
+knowledgebase_router.py
+CRUD for KB documents:
+•	Add
+•	Edit
+•	Delete
+•	Vector embedding
+api_router.py
+General API:
+•	Business settings
+•	Technician list
+•	Personality profile
+•	Call logs
+appointments.py
+•	/book — books appointments in Calendar
+•	/availability — fetch free times
+billing.py
+Stripe webhooks:
+•	Subscription created
+•	Payment failed
+•	Customer updated
+________________________________________
+🎨 5. FRONTEND ARCHITECTURE (Next.js)
+Folder Structure
+/pages
+   index.js
+   dashboard.js
+   calls.js
+   knowledgebase.js
+   personality.js
+   technicians.js
+   settings.js
+   onboarding.js
+
+/components
+   GlassCard.jsx
+   GlassButton.jsx
+   GlassPanel.jsx
+   Sidebar.jsx
+   GlowInput.jsx
+
+/styles
+   globals.css
+   tailwind.config.js
+Key Pages
+•	Dashboard: KPIs, metrics, conversion, call volume
+•	Calls: Real-time transcript feed (SSE)
+•	Knowledgebase: Editable documents
+•	Personality: Custom AI behavior editor
+•	Technicians: Phone numbers + dispatch rules
+•	Settings: Business hours, pricing, service area
+•	Onboarding: Multi-step setup wizard
+________________________________________
+🔗 6. INTEGRATIONS — HOW THEY CONNECT
+Twilio → Backend
+1.	Customer calls business number
+2.	Twilio webhook → /twilio/voice
+3.	Backend engages AI engine
+4.	Backend → Twilio response webhook
+5.	Transcript chunks sent to SSE stream
+Backend → OpenAI Realtime
+•	Streaming conversation
+•	Duplex audio
+•	Intent extraction
+•	Language detection
+Backend → Pinecone
+•	Query KB documents
+•	Retrieve context chunks for AI
+Backend → Google Calendar
+•	Find appointment times
+•	Book directly from call
+Backend → Stripe
+•	Subscription lifecycle management
+•	Webhook receives billing events
+________________________________________
+🗄 7. DATABASE MODELS
+Business
+•	id
+•	owner_id
+•	name
+•	phone_number
+•	location
+•	hours
+•	services JSON
+•	pricing JSON
+•	ai_personality
+•	vector_index_id
+Technician
+•	id
+•	business_id
+•	name
+•	phone
+•	role
+CallLog
+•	id
+•	business_id
+•	timestamp
+•	transcript
+•	summary
+•	sentiment
+•	disposition
+•	booked_appointment
+•	assigned_tech
+KnowledgebaseDocument
+•	id
+•	business_id
+•	title
+•	content
+•	vector_id
+________________________________________
+📡 8. REAL-TIME TRANSCRIPTS (SSE)
+Frontend opens a stream to:
+GET /transcripts
+Backend pushes:
+•	"customer: Hello?"
+•	"cortana: Thanks for calling..."
+•	"customer: I need a plumber ASAP"
+Updates UI instantly.
+________________________________________
+🎤 9. CORTANA VOICE LOGIC
+Cortana must:
+•	Answer instantly
+•	Identify customer intent
+•	Detect emergencies
+•	Offer soonest appointment
+•	Book inside Google Calendar
+•	Dispatch technicians via SMS
+•	Log call to database
+•	Update dashboard real time
+•	Switch to Spanish when detected
+Cortana is rule-based + AI-driven.
+________________________________________
+💳 10. BILLING SYSTEM (Stripe)
+Stripe creates:
+•	Subscription per business
+•	Webhook notifies backend
+•	Backend updates business plan
+•	Usage-based add-ons optional
+________________________________________
+🎛 11. GLASSMORPHIC UI STYLING (TailwindCSS)
+Global CSS includes:
+backdrop-blur-2xl
+bg-white/10
+border-white/20
+shadow-xl
+rounded-2xl
+transition-all
+hover:scale-[1.01]
+Components:
+•	Frosted panels
+•	Neon accents (blue/purple/teal)
+•	Rounded corners
+•	Soft shadows
+•	Smooth hover animations
+________________________________________
+🧱 12. PROJECT STACK SUMMARY
+Backend
+•	Python 3.12
+•	FastAPI
+•	OpenAI Realtime
+•	Twilio Voice/SMS
+•	Pinecone / Qdrant
+•	PostgreSQL
+•	Google Calendar API
+•	Stripe
+•	Redis (optional)
+Frontend
+•	Next.js
+•	React
+•	TailwindCSS
+•	SSE streaming
+•	Modern glass UI
+Hosting
+•	Replit (backend + frontend)
+•	Twilio Webhook URLs
+•	Stripe Webhook URL
+________________________________________
+🧩 This condensed summary gives Replit everything needed to start generating code.
+If Replit reads this, it will understand:
+•	The architecture
+•	The APIs
+•	The database schema
+•	The flow of data
+•	The design system
+•	Every moving part
+This is the complete systems blueprint.
