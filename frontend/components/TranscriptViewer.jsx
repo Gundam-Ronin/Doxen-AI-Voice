@@ -6,32 +6,41 @@ export default function TranscriptViewer({ businessId }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!businessId || typeof window === 'undefined') return;
 
-    const eventSource = new EventSource(`/api/stream/transcripts/${businessId}`);
+    let eventSource = null;
+    
+    try {
+      eventSource = new EventSource(`/api/stream/transcripts/${businessId}`);
 
-    eventSource.onopen = () => {
-      setConnected(true);
-    };
+      eventSource.onopen = () => {
+        setConnected(true);
+      };
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'transcript') {
-          setTranscripts(prev => [...prev, data]);
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'transcript') {
+            setTranscripts(prev => [...prev, data]);
+          }
+        } catch (e) {
+          console.log('Parse error:', e);
         }
-      } catch (e) {
-        console.error('Parse error:', e);
-      }
-    };
+      };
 
-    eventSource.onerror = () => {
+      eventSource.onerror = () => {
+        setConnected(false);
+      };
+    } catch (e) {
+      console.log('SSE connection failed:', e);
       setConnected(false);
-    };
+    }
 
     return () => {
-      eventSource.close();
+      if (eventSource) {
+        eventSource.close();
+      }
     };
   }, [businessId]);
 
