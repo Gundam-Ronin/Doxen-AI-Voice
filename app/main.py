@@ -62,17 +62,33 @@ async def get_integration_status():
         "stripe": bool(os.environ.get("STRIPE_SECRET_KEY"))
     }
 
-if os.path.exists("frontend/out"):
-    app.mount("/static", StaticFiles(directory="frontend/out"), name="static")
+FRONTEND_DIR = "frontend/out"
+
+@app.get("/")
+async def serve_index():
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path, media_type="text/html")
+    return {"message": "Cortana AI Voice System API", "docs": "/docs"}
+
+if os.path.exists(FRONTEND_DIR):
+    app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="next_static")
+
+@app.get("/{path:path}")
+async def serve_frontend(path: str):
+    if path.startswith("api/") or path.startswith("twilio/") or path.startswith("billing/"):
+        return {"error": "Not found"}
     
-    @app.get("/{path:path}")
-    async def serve_frontend(path: str):
-        file_path = f"frontend/out/{path}"
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        
-        index_path = "frontend/out/index.html"
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        
-        return {"error": "Frontend not built"}
+    file_path = os.path.join(FRONTEND_DIR, path)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return FileResponse(file_path)
+    
+    html_path = os.path.join(FRONTEND_DIR, path, "index.html")
+    if os.path.exists(html_path):
+        return FileResponse(html_path, media_type="text/html")
+    
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path, media_type="text/html")
+    
+    return {"error": "Frontend not built. Run: cd frontend && npm run build"}

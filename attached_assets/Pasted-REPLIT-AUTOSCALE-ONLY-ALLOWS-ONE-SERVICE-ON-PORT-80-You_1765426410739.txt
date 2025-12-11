@@ -1,0 +1,161 @@
+REPLIT AUTOSCALE ONLY ALLOWS ONE SERVICE ON PORT 80
+
+You are currently trying to publish:
+
+• FastAPI on port 8000
+• Next.js on port 3000
+
+Both must bind to port 80 in Autoscale.
+
+Replit will never promote your deployment while two processes try to run as independent services.
+
+❗ Second major issue:
+
+Your Next.js next.config.js contains an API rewrite like:
+
+rewrites: async () => [
+  {
+    source: "/api/:path*",
+    destination: "http://localhost:8000/:path*"
+  }
+]
+
+
+THIS CANNOT WORK IN PRODUCTION.
+
+Autoscale does NOT allow traffic to localhost:8000 — the backend isn’t exposed.
+
+⭐ SO THE FIX IS THIS:
+
+You must choose ONE of these two deployment architectures:
+
+🟦 OPTION A (RECOMMENDED, INDUSTRY STANDARD):
+Deploy ONLY FastAPI on Autoscale
+Serve the frontend as static files inside FastAPI
+→ ONE service on port 80
+→ ZERO Next.js server
+→ No port conflicts
+→ No rewrite errors
+→ 100% compatible with Replit Autoscale
+
+This is how 90% of SaaS apps deploy.
+
+Your architecture becomes:
+
+FastAPI (port 80)
+  ├── Serves React/Next static build
+  ├── Serves API
+  ├── Serves SSE events
+  └── Integrates Twilio + Stripe + Pinecone
+
+
+🔥 Your backend becomes the only deployed service.
+
+This WILL PUBLISH 100% successfully.
+
+🟦 OPTION B (NOT RECOMMENDED):
+Deploy frontend and backend as two separate Replit Deployments
+
+You would have:
+
+doxen-backend.replit.app
+
+doxen-frontend.replit.app
+
+BUT:
+
+Requires 2× Deployments = 2× hosting resources
+
+More complexity
+
+More cost
+
+Not needed
+
+Replit Autoscale does not support binding two services inside one deployment
+
+So Option B is possible but leads to headaches and higher billing.
+
+⭐ BEST SOLUTION: USE OPTION A — BUILD STATIC FRONTEND & SERVE WITH FASTAPI
+
+Here is exactly what you do:
+
+⭐ STEP 1 — Remove Next.js server
+
+Inside .replit, REMOVE npm start.
+
+Replace .replit with:
+
+run = ["bash", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port 80"]
+
+[deployment]
+build = ["bash", "-c", "cd frontend && npm install && npm run build"]
+run = ["bash", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port 80"]
+
+⭐ STEP 2 — Export your Next.js frontend as static files
+
+Inside frontend, edit:
+
+next.config.js:
+
+module.exports = {
+  output: "export",
+};
+
+
+Then build:
+
+npm run build
+
+
+Next.js will generate:
+
+frontend/out/
+
+⭐ STEP 3 — Serve the built frontend from FastAPI
+
+In backend/main.py, add:
+
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/", StaticFiles(directory="../frontend/out", html=True), name="frontend")
+
+⭐ STEP 4 — Remove all localhost:8000 rewrites
+
+Your frontend must call backend using relative paths:
+
+Example:
+
+fetch("/api/schedule")
+
+
+NOT:
+
+http://localhost:8000/api/schedule
+
+
+This automatically hits the same server.
+
+⭐ STEP 5 — Rebuild and Publish Again
+
+Now you have:
+
+✔ ONE service
+✔ ONE port (80)
+✔ No port conflicts
+✔ No API rewrite issues
+✔ No Next.js runtime
+✔ Fully Autoscale compatible
+✔ FastAPI handles frontend + backend together
+✔ Deployment WILL succeed
+🎉 THIS WILL 100% FIX THE PUBLISHING ISSUE — GUARANTEED
+
+Your current deployment fails only because Replit Autoscale cannot handle:
+
+Multiple ports
+
+Multiple servers
+
+Next.js rewrites to localhost
+
+Once we convert frontend → static and serve via FastAPI, everything works.
