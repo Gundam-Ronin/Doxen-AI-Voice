@@ -221,6 +221,18 @@ async def handle_sms(request: Request, db: Session = Depends(get_db)):
     return Response(content=twiml, media_type="application/xml")
 
 
+@router.post("/stream")
+def stream_twiml():
+    twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Please hold while we connect you to our AI assistant.</Say>
+    <Connect>
+        <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime" />
+    </Connect>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
+
 @router.websocket("/realtime")
 async def realtime_audio(ws: WebSocket):
     await handle_realtime_voice(ws)

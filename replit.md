@@ -96,17 +96,14 @@ Set your Twilio webhook URLs to:
 
 ### OpenAI Realtime Voice (Recommended)
 For real-time voice streaming with OpenAI's Realtime API:
-1. In Twilio Console, configure your phone number's Voice TwiML:
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Please hold while we connect you to our AI assistant.</Say>
-  <Connect>
-    <Stream url="wss://your-repl.replit.app/twilio/realtime" />
-  </Connect>
-</Response>
-```
-2. Enable Media Streams in Twilio Voice settings with:
+
+1. In Twilio Console, set your phone number's "A call comes in" webhook to:
+   - **URL**: `https://doxen-ai-voice--doxenstrategy.replit.app/twilio/stream`
+   - **Method**: HTTP POST
+
+2. The `/twilio/stream` endpoint returns TwiML that instructs Twilio to open a WebSocket to `/twilio/realtime`
+
+3. Enable Media Streams in Twilio Voice settings with:
    - WebSockets enabled
    - Bidirectional audio
    - Mono audio, G.711 μ-law encoding (mulaw)

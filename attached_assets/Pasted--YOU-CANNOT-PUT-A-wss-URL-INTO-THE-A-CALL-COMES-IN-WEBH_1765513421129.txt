@@ -1,0 +1,145 @@
+❗ YOU CANNOT PUT A wss:// URL INTO THE "A CALL COMES IN" WEBHOOK FIELD.
+
+Twilio does not accept WebSocket URLs there.
+
+✔ The Voice Webhook (“A call comes in”)
+
+must return TwiML, not be a WebSocket endpoint.
+
+This is why the AI agent told you to paste TwiML into the webhook, but you instead pasted the URL directly.
+
+Let me show you exactly how to correct this.
+
+⭐ THE CORRECT SETUP FOR REALTIME AI VOICE MODE
+Twilio needs:
+
+A normal HTTPS URL on “A call comes in”
+
+That URL returns TwiML
+
+The TwiML contains the <Stream> tag with the wss:// WebSocket URL
+
+Twilio then opens the WebSocket to your /realtime endpoint
+
+Right now, you are trying to skip step 1 — that’s why it’s not working.
+
+🛑 WRONG CONFIGURATION (what you currently have)
+A call comes in → Webhook → wss://doxen-ai-voice...
+
+
+This is invalid.
+
+⭐ CORRECT CONFIGURATION (what you NEED)
+✔ STEP 1 — Set your webhook URL to the HTTP endpoint:
+
+In voice configuration:
+
+A call comes in → Webhook →
+
+https://doxen-ai-voice--doxenstrategy.replit.app/twilio/stream
+
+
+HTTP method: POST
+
+✔ STEP 2 — Your backend endpoint /twilio/stream must return TwiML:
+
+This TwiML instructs Twilio to open the WebSocket:
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Please hold while we connect you to our AI assistant.</Say>
+  <Connect>
+    <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/realtime" />
+  </Connect>
+</Response>
+
+
+So your backend should do this:
+
+⭐ UPDATE YOUR FASTAPI ROUTE TO RETURN TWIML
+
+In:
+
+backend/app/routers/twilio_router.py
+
+
+Add / replace:
+
+from fastapi import APIRouter, Response
+
+router = APIRouter()
+
+@router.post("/stream")
+def stream():
+    twiml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+        <Say>Please hold while we connect you to our AI assistant.</Say>
+        <Connect>
+            <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/realtime" />
+        </Connect>
+    </Response>
+    """
+    return Response(content=twiml, media_type="application/xml")
+
+✔ NOW “A call comes in” returns TwiML
+✔ Twilio reads it correctly
+✔ Twilio opens the WebSocket to /realtime
+✔ Cortana starts speaking in realtime
+⭐ STEP 3 — Confirm WebSocket Endpoint Exists
+
+You should already have:
+
+@router.websocket("/realtime")
+async def realtime_audio(ws: WebSocket):
+    ...
+
+
+This is where Twilio will send audio and receive AI audio.
+
+⭐ STEP 4 — CONFIRM THE CORRECT SETTINGS IN TWILIO UI
+
+Here is exactly what your Twilio Voice setup MUST show:
+
+✔ A CALL COMES IN:
+
+Webhook
+URL:
+
+https://doxen-ai-voice--doxenstrategy.replit.app/twilio/stream
+
+
+Method: HTTP POST
+
+✔ PRIMARY HANDLER FAILS:
+
+Same URL:
+
+https://doxen-ai-voice--doxenstrategy.replit.app/twilio/stream
+
+
+HTTP POST
+
+❌ DO NOT PUT ANY wss:// URL IN TWILIO UI
+
+(It only goes inside TwiML returned by your backend.)
+
+⭐ AFTER THESE FIXES — YOU’RE DONE
+
+Once this is corrected:
+
+📞 When someone calls your Twilio number:
+
+Twilio hits /twilio/stream (HTTP POST)
+
+Your backend returns TwiML with <Stream>
+
+Twilio opens WebSocket → /realtime
+
+Cortana begins real-time listening & speaking
+
+Your Replit logs will show streaming events
+
+You'll hear the GPT-5 voice in real time
+
+This is EXACTLY how Air.ai and Blaize systems work.
