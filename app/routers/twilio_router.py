@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException, WebSocket
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -13,6 +13,7 @@ from ..core.vector_search import get_relevant_context
 from ..core.routing import routing_manager
 from ..core.dispatcher import dispatcher
 from ..core.fallback import fallback_manager
+from ..core.cortana_realtime import handle_realtime_voice
 
 router = APIRouter(prefix="/twilio", tags=["twilio"])
 
@@ -218,3 +219,8 @@ async def handle_sms(request: Request, db: Session = Depends(get_db)):
 </Response>"""
     
     return Response(content=twiml, media_type="application/xml")
+
+
+@router.websocket("/realtime")
+async def realtime_audio(ws: WebSocket):
+    await handle_realtime_voice(ws)

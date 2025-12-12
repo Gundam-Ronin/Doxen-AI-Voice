@@ -20,6 +20,7 @@ AI-driven voice automation SaaS platform for home-services businesses built by *
   /core
     ai_engine.py       - OpenAI conversation logic
     call_manager.py    - Call flow and transcript management
+    cortana_realtime.py - OpenAI Realtime API WebSocket handler
     vector_search.py   - Pinecone knowledge retrieval
     calendar.py        - Google Calendar integration
     dispatcher.py      - Twilio SMS dispatch
@@ -93,6 +94,23 @@ Set your Twilio webhook URLs to:
 - Status: `https://your-repl.replit.dev/twilio/status`
 - SMS: `https://your-repl.replit.dev/twilio/sms`
 
+### OpenAI Realtime Voice (Recommended)
+For real-time voice streaming with OpenAI's Realtime API:
+1. In Twilio Console, configure your phone number's Voice TwiML:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Please hold while we connect you to our AI assistant.</Say>
+  <Connect>
+    <Stream url="wss://your-repl.replit.app/twilio/realtime" />
+  </Connect>
+</Response>
+```
+2. Enable Media Streams in Twilio Voice settings with:
+   - WebSockets enabled
+   - Bidirectional audio
+   - Mono audio, G.711 μ-law encoding (mulaw)
+
 ## User Preferences
 - Glassmorphic UI with frosted glass effects
 - Neon accent colors (blue, purple, teal)
@@ -105,3 +123,5 @@ Set your Twilio webhook URLs to:
 - Next.js frontend with glassmorphic dashboard
 - SSE transcript streaming
 - PostgreSQL database models
+- Added OpenAI Realtime API WebSocket handler (December 12, 2025)
+- Added /twilio/realtime WebSocket endpoint for live voice streaming
