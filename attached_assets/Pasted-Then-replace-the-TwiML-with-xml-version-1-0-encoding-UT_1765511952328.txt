@@ -1,0 +1,179 @@
+Then replace the TwiML with:
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Please hold while we connect you to our AI assistant.</Say>
+  <Connect>
+    <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/realtime" />
+  </Connect>
+</Response>
+
+✔ Twilio will now open a REALTIME audio stream
+✔ Twilio will send raw audio to your server
+✔ Your server will stream it to OpenAI Realtime
+✔ Cortana will respond LIVE
+🚀 STEP 2 — ADD THE REALTIME ENDPOINT IN FASTAPI
+
+Create a new file:
+
+backend/app/core/cortana_realtime.py
+
+
+Paste this:
+
+import asyncio
+import json
+import websockets
+import base64
+import os
+from fastapi import WebSocket
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+OPENAI_REALTIME_URL = (
+    "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+)
+
+async def handle_realtime_voice(websocket: WebSocket):
+    await websocket.accept()
+
+    # Connect to OpenAI Realtime WebSocket
+    async with websockets.connect(
+        OPENAI_REALTIME_URL,
+        extra_headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+    ) as openai_ws:
+
+        print("Realtime AI connected")
+
+        async def twilio_to_openai():
+            while True:
+                twilio_msg = await websocket.receive_text()
+                data = json.loads(twilio_msg)
+
+                if data["event"] == "media":
+                    audio_chunk = base64.b64decode(data["media"]["payload"])
+                    await openai_ws.send(
+                        json.dumps(
+                            {
+                                "type": "input_audio_buffer.append",
+                                "audio": audio_chunk.decode("latin1"),
+                            }
+                        )
+                    )
+
+                elif data["event"] == "stop":
+                    await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                    break
+
+        async def openai_to_twilio():
+            while True:
+                ai_msg = await openai_ws.recv()
+                ai_data = json.loads(ai_msg)
+
+                if ai_data["type"] == "response.audio.delta":
+                    audio = base64.b64encode(ai_data["audio"]).decode("utf-8")
+
+                    await websocket.send_text(
+                        json.dumps(
+                            {
+                                "event": "media",
+                                "media": {"payload": audio},
+                            }
+                        )
+                    )
+
+        await asyncio.gather(twilio_to_openai(), openai_to_twilio())
+
+✔ Handles realtime audio input from Twilio
+✔ Streams audio to OpenAI Realtime engine
+✔ Streams Cortana’s synthesized voice back
+✔ Runs in full duplex (simultaneous talk/listen)
+🚀 STEP 3 — ADD FASTAPI WEBSOCKET ENDPOINT
+
+In:
+
+backend/app/routers/twilio_router.py
+
+
+Add:
+
+from fastapi import APIRouter, WebSocket
+from app.core.cortana_realtime import handle_realtime_voice
+
+router = APIRouter()
+
+@router.get("/voice")
+def inbound_call():
+    # Legacy fallback, not used in realtime mode
+    return "<Response><Say>Realtime mode enabled.</Say></Response>"
+
+@router.websocket("/realtime")
+async def realtime_audio(ws: WebSocket):
+    await handle_realtime_voice(ws)
+
+✔ Twilio now connects directly to /realtime
+✔ Your backend becomes a realtime voice bridge
+🚀 STEP 4 — ENABLE SPEECH MODE & VOICE MODEL IN OPENAI
+
+Add these parameters when connecting:
+
+{
+  "type": "session.update",
+  "session": {
+    "voice": "alloy",         # You can choose: verse, alloy, shimmer, nova
+    "input_audio_format": "pcm16",
+    "output_audio_format": "pcm16",
+    "turn_detection": { "type": "server_vad" },  # enables interruption
+  }
+}
+
+
+This gives:
+
+Turning-taking detection
+
+Super fast response time
+
+Realistic human conversation
+
+🚀 STEP 5 — UPDATE YOUR Twilio Media Stream SETTINGS
+
+In Voice > Tools > Media Streams:
+
+Enable:
+
+✔ Use WebSockets
+✔ Allow bidirectional audio
+✔ Enable mono audio
+✔ PCM16 encoding
+
+⭐ WHAT HAPPENS AFTER THIS?
+
+When someone calls your number:
+
+Twilio opens WebSocket audio stream
+
+Your FastAPI endpoint /realtime accepts connection
+
+Your backend streams audio directly to OpenAI
+
+OpenAI responds with real-time synthesized voice
+
+Twilio plays that voice to the caller
+
+Cortana listens + speaks simultaneously
+
+Intent triggers execute Python functions (booking, dispatch)
+
+This becomes a fully autonomous AI agent.
+
+⭐ THE NEXT STEP: ADDING FUNCTION CALLING
+
+This allows Cortana to:
+
+📅 Book appointments
+📍 Check service area
+💲 Quote pricing
+👨‍🔧 Assign technicians
+📝 Create call summaries
+🚨 Detect emergencies
