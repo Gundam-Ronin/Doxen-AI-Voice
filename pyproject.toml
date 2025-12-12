@@ -15,4 +15,5 @@ dependencies = [
     "stripe>=14.0.1",
     "twilio>=9.8.8",
     "uvicorn>=0.38.0",
+    "websockets>=15.0.1",
 ]
