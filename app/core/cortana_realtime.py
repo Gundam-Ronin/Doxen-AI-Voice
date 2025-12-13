@@ -2,7 +2,12 @@ import asyncio
 import json
 import websockets
 import os
+from datetime import datetime
 from fastapi import WebSocket, WebSocketDisconnect
+
+from ..database.session import SessionLocal
+from ..database.models import CallLog, ActiveCall
+from .call_manager import call_manager
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -23,7 +28,11 @@ async def handle_realtime_voice(websocket: WebSocket):
     await websocket.accept()
     
     stream_sid = None
+    call_sid = None
     openai_ws = None
+    transcripts = []
+    business_id = 1
+    caller_number = "Unknown"
     
     try:
         if not OPENAI_API_KEY:
@@ -63,7 +72,7 @@ async def handle_realtime_voice(websocket: WebSocket):
         print("Session configured for g711_ulaw audio")
 
         async def receive_from_twilio():
-            nonlocal stream_sid
+            nonlocal stream_sid, call_sid, caller_number
             try:
                 while True:
                     message = await websocket.receive_text()
@@ -71,7 +80,14 @@ async def handle_realtime_voice(websocket: WebSocket):
                     
                     if data["event"] == "start":
                         stream_sid = data["start"]["streamSid"]
-                        print(f"Twilio stream started: {stream_sid}")
+                        call_sid = data["start"].get("callSid", stream_sid)
+                        
+                        custom_params = data["start"].get("customParameters", {})
+                        caller_number = custom_params.get("from", "Unknown")
+                        
+                        print(f"Twilio stream started: {stream_sid}, Call SID: {call_sid}")
+                        
+                        call_manager.start_call(call_sid, business_id, caller_number)
                         
                     elif data["event"] == "media":
                         audio_payload = data["media"]["payload"]
@@ -91,7 +107,7 @@ async def handle_realtime_voice(websocket: WebSocket):
                 print(f"Twilio receive error: {e}")
 
         async def receive_from_openai():
-            nonlocal stream_sid
+            nonlocal stream_sid, transcripts, call_sid
             try:
                 async for message in openai_ws:
                     response = json.loads(message)
@@ -118,11 +134,19 @@ async def handle_realtime_voice(websocket: WebSocket):
                             
                     elif response["type"] == "conversation.item.input_audio_transcription.completed":
                         transcript = response.get("transcript", "")
-                        print(f"User said: {transcript}")
+                        if transcript:
+                            print(f"User said: {transcript}")
+                            transcripts.append({"speaker": "customer", "text": transcript})
+                            if call_sid:
+                                call_manager.add_transcript(call_sid, "customer", transcript)
                         
                     elif response["type"] == "response.audio_transcript.done":
                         transcript = response.get("transcript", "")
-                        print(f"Cortana said: {transcript}")
+                        if transcript:
+                            print(f"Cortana said: {transcript}")
+                            transcripts.append({"speaker": "cortana", "text": transcript})
+                            if call_sid:
+                                call_manager.add_transcript(call_sid, "cortana", transcript)
                         
                     elif response["type"] == "error":
                         print(f"OpenAI error: {response}")
@@ -153,4 +177,31 @@ async def handle_realtime_voice(websocket: WebSocket):
                 await openai_ws.close()
             except:
                 pass
+        
+        if call_sid and transcripts:
+            try:
+                db = SessionLocal()
+                transcript_text = "\n".join([
+                    f"{t['speaker']}: {t['text']}" for t in transcripts
+                ])
+                
+                call_log = CallLog(
+                    business_id=business_id,
+                    call_sid=call_sid,
+                    caller_number=caller_number,
+                    transcript=transcript_text,
+                    sentiment="neutral",
+                    disposition="completed",
+                    language="en"
+                )
+                db.add(call_log)
+                db.commit()
+                db.close()
+                print(f"Call log saved: {call_sid}")
+            except Exception as e:
+                print(f"Error saving call log: {e}")
+        
+        if call_sid:
+            call_manager.end_call(call_sid)
+        
         print("Realtime session ended")
