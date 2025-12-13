@@ -222,12 +222,15 @@ async def handle_sms(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/stream")
-def stream_twiml():
-    twiml = """<?xml version="1.0" encoding="UTF-8"?>
+async def stream_twiml(request: Request):
+    host = request.headers.get("host", "doxen-ai-voice--doxenstrategy.replit.app")
+    ws_url = f"wss://{host}/twilio/realtime"
+    
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Please hold while we connect you to our AI assistant.</Say>
     <Connect>
-        <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime" />
+        <Stream url="{ws_url}" />
     </Connect>
 </Response>"""
     return Response(content=twiml, media_type="application/xml")
