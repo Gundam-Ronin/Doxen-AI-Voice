@@ -62,7 +62,7 @@ AI-driven voice automation SaaS platform for home-services businesses built by *
 ### Database Models
 - **Business**: Company profiles, settings, AI personality
 - **Technician**: Team members with skills and availability
-- **CallLog**: Call history, transcripts, sentiment
+- **CallLog**: Call history, transcripts, sentiment, customer_name, customer_phone, customer_email, customer_address, service_requested
 - **KnowledgebaseDocument**: AI knowledge base content
 - **ActiveCall**: Real-time call tracking
 
@@ -74,9 +74,11 @@ AI-driven voice automation SaaS platform for home-services businesses built by *
 - `TWILIO_AUTH_TOKEN` - Twilio auth
 - `TWILIO_PHONE_NUMBER` - Twilio phone number
 - `PINECONE_API_KEY` - Pinecone vector database
-- `GOOGLE_CALENDAR_CREDENTIALS` - Google Calendar JSON credentials
 - `STRIPE_SECRET_KEY` - Stripe billing
 - `STRIPE_WEBHOOK_SECRET` - Stripe webhook verification
+
+### Google Calendar (OAuth via Replit Connector)
+Google Calendar is now connected via Replit's built-in OAuth connector - no manual credentials needed.
 
 ### Auto-configured
 - `DATABASE_URL` - PostgreSQL connection (auto-configured by Replit)
@@ -122,3 +124,40 @@ For real-time voice streaming with OpenAI's Realtime API:
 - PostgreSQL database models
 - Added OpenAI Realtime API WebSocket handler (December 12, 2025)
 - Added /twilio/realtime WebSocket endpoint for live voice streaming
+- **Phase 7 Implementation (December 13, 2025)**:
+  - Google Calendar integration using Replit's connector (OAuth)
+  - Customer data extraction (name, phone, email, address) from speech using regex + AI
+  - Intent detection for booking, emergency, pricing, and other intents
+  - Automatic appointment booking during voice calls
+  - SMS confirmations to customers after booking
+  - Technician matching and dispatch via SMS
+  - Live transcript streaming via SSE to dashboard
+  - Database schema updated with customer data fields in CallLog
+
+## Phase 7 Features
+
+### Customer Data Extraction
+The system automatically extracts customer information during calls:
+- Name, phone, email, address using regex patterns
+- AI-powered extraction for complex cases using GPT-4o-mini
+- Data collected throughout the call and finalized at end
+
+### Intent Detection
+Real-time intent detection during calls:
+- `BOOK_APPOINTMENT` - Customer wants to schedule service
+- `EMERGENCY` - Urgent service needed (flooding, gas leak, etc.)
+- `PRICING_INQUIRY` - Questions about cost
+- `CHECK_AVAILABILITY` - Checking open slots
+- `CONFIRMATION/DECLINE` - Response to offers
+
+### Appointment Booking Flow
+1. Customer expresses booking intent
+2. System fetches available slots from Google Calendar
+3. AI offers time slots to customer
+4. Customer confirms - booking created in Calendar
+5. SMS confirmation sent to customer
+6. Technician dispatched via SMS
+
+### New Core Modules
+- `data_extractor.py` - Customer data extraction using regex + AI
+- `intent_detector.py` - Customer intent classification

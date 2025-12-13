@@ -1,29 +1,68 @@
 import os
+import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
-GOOGLE_CALENDAR_CREDENTIALS = os.environ.get("GOOGLE_CALENDAR_CREDENTIALS")
+async def get_google_calendar_client():
+    """Get authenticated Google Calendar client using Replit's connection."""
+    try:
+        from googleapiclient.discovery import build
+        from google.oauth2.credentials import Credentials
+        
+        hostname = os.environ.get('REPLIT_CONNECTORS_HOSTNAME')
+        repl_identity = os.environ.get('REPL_IDENTITY')
+        web_repl_renewal = os.environ.get('WEB_REPL_RENEWAL')
+        
+        if repl_identity:
+            x_replit_token = f'repl {repl_identity}'
+        elif web_repl_renewal:
+            x_replit_token = f'depl {web_repl_renewal}'
+        else:
+            return None
+        
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f'https://{hostname}/api/v2/connection?include_secrets=true&connector_names=google-calendar',
+                headers={
+                    'Accept': 'application/json',
+                    'X_REPLIT_TOKEN': x_replit_token
+                }
+            ) as response:
+                data = await response.json()
+                connection = data.get('items', [{}])[0]
+                
+        settings = connection.get('settings', {})
+        access_token = settings.get('access_token') or settings.get('oauth', {}).get('credentials', {}).get('access_token')
+        
+        if not access_token:
+            return None
+        
+        credentials = Credentials(token=access_token)
+        service = build('calendar', 'v3', credentials=credentials)
+        return service
+    except Exception as e:
+        print(f"Google Calendar connection error: {e}")
+        return None
+
 
 class CalendarService:
     def __init__(self):
         self.service = None
-        if GOOGLE_CALENDAR_CREDENTIALS:
-            try:
-                import json
-                creds_data = json.loads(GOOGLE_CALENDAR_CREDENTIALS)
-                credentials = Credentials.from_authorized_user_info(creds_data)
-                self.service = build('calendar', 'v3', credentials=credentials)
-            except Exception as e:
-                print(f"Google Calendar initialization error: {e}")
     
-    def get_availability(
+    async def ensure_connected(self):
+        """Ensure we have a fresh Google Calendar connection."""
+        self.service = await get_google_calendar_client()
+        return self.service is not None
+    
+    async def get_availability(
         self, 
         calendar_id: str = "primary",
         days_ahead: int = 7,
         slot_duration_minutes: int = 60
     ) -> List[Dict]:
+        await self.ensure_connected()
+        
         if not self.service:
             return self._get_mock_availability(days_ahead, slot_duration_minutes)
         
@@ -113,30 +152,42 @@ class CalendarService:
         
         return slots[:20]
     
-    def book_appointment(
+    async def book_appointment(
         self,
         calendar_id: str = "primary",
         summary: str = "Service Appointment",
         description: str = "",
         start_time: str = "",
         duration_minutes: int = 60,
-        attendee_email: str = None
+        attendee_email: str = None,
+        customer_info: Dict = None
     ) -> Optional[Dict]:
+        await self.ensure_connected()
+        
         if not self.service:
             return {
                 "success": True,
                 "event_id": "mock_" + datetime.now().strftime("%Y%m%d%H%M%S"),
                 "start": start_time,
-                "summary": summary
+                "summary": summary,
+                "mock": True
             }
         
         try:
             start_dt = datetime.fromisoformat(start_time)
             end_dt = start_dt + timedelta(minutes=duration_minutes)
             
+            full_description = description
+            if customer_info:
+                full_description += f"\n\nCustomer Details:\n"
+                full_description += f"Name: {customer_info.get('name', 'N/A')}\n"
+                full_description += f"Phone: {customer_info.get('phone', 'N/A')}\n"
+                full_description += f"Address: {customer_info.get('address', 'N/A')}\n"
+                full_description += f"Email: {customer_info.get('email', 'N/A')}\n"
+            
             event = {
                 'summary': summary,
-                'description': description,
+                'description': full_description.strip(),
                 'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'America/New_York'},
                 'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'America/New_York'},
             }
@@ -159,5 +210,12 @@ class CalendarService:
         except Exception as e:
             print(f"Booking error: {e}")
             return None
+    
+    async def get_next_available_slot(self, service_type: str = "service") -> Optional[Dict]:
+        """Get the next available appointment slot."""
+        slots = await self.get_availability(days_ahead=7, slot_duration_minutes=60)
+        if slots:
+            return slots[0]
+        return None
 
 calendar_service = CalendarService()

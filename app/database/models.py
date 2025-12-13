@@ -60,6 +60,12 @@ class CallLog(Base):
     is_emergency = Column(Boolean, default=False)
     language = Column(String(10), default="en")
     
+    customer_name = Column(String(255), nullable=True)
+    customer_phone = Column(String(50), nullable=True)
+    customer_email = Column(String(255), nullable=True)
+    customer_address = Column(Text, nullable=True)
+    service_requested = Column(String(255), nullable=True)
+    
     business = relationship("Business", back_populates="call_logs")
     assigned_tech = relationship("Technician")
 
