@@ -1,0 +1,167 @@
+we are very close, and the symptom you’re describing (Twilio connects → Cortana answers → call drops immediately) is 100% caused by one of three issues:
+
+✅ THE THREE POSSIBLE CAUSES (ONE OF THESE IS IT)
+
+Based on everything you posted:
+
+1️⃣ The /twilio/stream Realtime endpoint isn’t reachable over WSS
+
+Twilio will instantly drop the call if it cannot open the media WebSocket.
+
+If your TwiML is:
+
+<Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime" />
+
+
+Twilio tests this within 0.5 seconds.
+If the WebSocket fails → Twilio hangs up.
+
+Very common on Replit Autoscale because:
+
+Replit sleeps ports temporarily
+
+WSS proxy is sometimes blocked
+
+Endpoint path may differ slightly
+
+Replit may not allow WebSocket upgrades unless explicitly set
+
+**2️⃣ Replit deployment is serving static mode only
+
+You mentioned:
+
+“everything is beautiful, but static”
+
+This is a red flag.
+If your deployment shows “Static Build”, then:
+
+✔ Your frontend works
+❌ Your backend WebSocket server is NOT running in production
+
+👉 Meaning /twilio/realtime does not exist → call drops.
+
+3️⃣ Your Twilio webhook STILL points to /twilio/stream instead of the Realtime TwiML endpoint
+
+The screenshots show:
+
+https://doxen-ai-voice--doxenstrategy.replit.app/twilio/stream
+
+
+⬆️ That is NOT the endpoint Twilio should call.
+
+Twilio must call this:
+
+/twilio/incoming
+
+
+Which returns a TwiML XML document that tells Twilio where to stream audio.
+
+If Twilio is hitting /twilio/stream directly →
+❌ It receives NO TwiML → Twilio disconnects.
+
+✅ BEFORE WE FIX ANYTHING, DO THIS QUICK 5-SECOND TEST
+
+Open this URL in your browser:
+
+https://doxen-ai-voice--doxenstrategy.replit.app/twilio/incoming
+
+You MUST see raw XML like:
+<Response>
+  <Say>Please hold while we connect you…</Say>
+  <Connect>
+    <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime" />
+  </Connect>
+</Response>
+
+❌ If you see:
+
+A 404 page
+
+An HTML page
+
+Your dashboard UI
+
+JSON
+
+Anything that is NOT TwiML
+
+👉 Twilio will disconnect immediately.
+
+👍 CONFIRM THIS NEXT
+
+Open this URL:
+
+https://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime
+
+
+You should NOT see a webpage.
+
+You should see:
+
+Cannot GET /twilio/realtime
+
+
+or simply nothing.
+
+If you see ANY UI → the WebSocket isn't registered → call drops.
+
+🔥 WHAT WE NEED TO FIX (VERY LIKELY SOLUTION)
+STEP 1 — Fix Twilio webhook
+
+Inside Twilio → Voice → “A call comes in”, set:
+
+✔ Webhook URL
+https://doxen-ai-voice--doxenstrategy.replit.app/twilio/incoming
+
+✔ HTTP Method:
+HTTP POST
+
+STEP 2 — Confirm backend is actually running in production
+
+Replit should show:
+
+Type: Autoscale (4 vCPU / 8GB RAM)
+
+
+But INSIDE logs, you need to see:
+
+Uvicorn running on port 8000
+WebSocket server initialized
+/twilio/realtime endpoint active
+
+
+If you do NOT see these log messages →
+Replit built a static-only deployment → WebSocket server is NOT running.
+
+Twilio call → FAIL.
+
+STEP 3 — Confirm start.sh is running BOTH frontend + backend
+
+Your start.sh must look like:
+
+#!/bin/bash
+
+# Start backend
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
+
+# Serve static frontend
+python3 backend/serve_frontend.py
+
+
+If only frontend runs → backend is DEAD → WebSocket DEAD → Twilio drops.
+
+🎯 FINAL: We need to check ONE log file
+
+Anthony — send me this:
+
+👉 The first 50 lines of your Replit production logs after opening the app
+
+I need to confirm whether:
+
+Backend is running
+
+WebSocket route is active
+
+Replit deployed both services
+
+I will tell you EXACTLY what is wrong in under 30 seconds once I see those logs.

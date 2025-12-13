@@ -20,7 +20,7 @@ Keep responses concise and conversational - remember this is a phone call, not a
 
 
 async def handle_realtime_voice(websocket: WebSocket):
-    await websocket.accept(subprotocol="audio")
+    await websocket.accept()
     
     stream_sid = None
     openai_ws = None
