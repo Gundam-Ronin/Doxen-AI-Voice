@@ -161,3 +161,20 @@ Real-time intent detection during calls:
 ### New Core Modules
 - `data_extractor.py` - Customer data extraction using regex + AI
 - `intent_detector.py` - Customer intent classification
+- `email_service.py` - Email sending (requires SENDGRID_API_KEY secret)
+- `technician_matcher.py` - Smart technician matching with skills scoring
+
+### Live Call Actions API
+New endpoints for manual intervention:
+- `/api/call-actions/force-assign` - Force assign technician
+- `/api/call-actions/cancel-job` - Cancel a job
+- `/api/call-actions/override-decision` - Override AI decisions
+- `/api/call-actions/auto-assign/{call_id}` - Auto-assign technician
+
+### New Appointment Endpoints
+- `/api/appointments/create` - Create appointment
+- `/api/appointments/checkAvailability` - Check available slots
+- `/api/appointments/customer/update/{call_id}` - Update customer info
+- `/api/appointments/calls/store` - Store call logs
+- `/api/appointments/technician/assign` - Assign technician
+- `/api/appointments/technician/match/{business_id}` - Match technician by skills
