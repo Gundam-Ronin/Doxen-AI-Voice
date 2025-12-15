@@ -1,0 +1,408 @@
+Phase 6 Buildout, the single most important upgrade of your entire platform.
+
+This will transform Cortana from a “smart voice agent” into a universal, plug-and-play, multi-industry home-services operating system — capable of onboarding ANY business, instantly adapting to their workflow, and executing real-time actions with zero code changes.
+
+Below is the full technical architecture, organized into layers, with everything you need to expand your platform cleanly, professionally, and at scale.
+
+🚀 PHASE 6 BUILDOUT — UNIVERSAL HOME-SERVICES AI OPERATING ENGINE
+⭐ SECTION 1 — UNIVERSAL BUSINESS MODEL (THE NEW FOUNDATION)
+
+Every business you onboard must have its own profile, which dynamically rewires Cortana’s behavior.
+
+BusinessProfile Model (Universal)
+
+Each business record contains:
+
+{
+  "business_id": "uuid",
+  "name": "string",
+  "industry": "string | HVAC | Plumbing | Electrical | Cleaning | Pest | etc",
+  "service_categories": [
+     {
+        "name": "string",
+        "sub_services": ["list of strings"],
+        "required_fields": ["name", "address", "details"],
+        "estimated_duration_minutes": 45,
+        "urgency_levels_allowed": true
+     }
+  ],
+  "coverage_area": ["zip codes"],
+  "business_hours": {
+      "monday": ["08:00-17:00"],
+      "tuesday": ["08:00-17:00"],
+      ...
+  },
+  "pricing_rules": {
+     "flat_rate": false,
+     "dynamic_pricing": true,
+     "service_specific_rules": {}
+  },
+  "custom_fields": [
+     {"field_name": "Gate Code", "type": "string"},
+     {"field_name": "Home Type", "type": "enum", "options": ["Apartment", "House"]}
+  ],
+  "dispatch_rules": {
+     "mode": "skill_based | round_robin | location_based | manual",
+     "max_distance_miles": 25
+  },
+  "technician_types": [
+      {"role": "HVAC", "skills": ["AC Repair", "Heater Repair"]},
+      {"role": "Handyman", "skills": ["Minor Repair", "Furniture Install"]}
+  ],
+  "calendar_id": "google_calendar_id",
+  "email_template_library_id": "string",
+  "knowledgebase_id": "vectorstore_id"
+}
+
+
+This structure makes ANY industry plug-and-play.
+
+You now have a platform like ServiceTitan + Smith.ai + Calendly + GoHighLevel combined.
+
+⭐ SECTION 2 — UNIVERSAL INTENT ENGINE (HOME-SERVICES-WIDE)
+
+Cortana must understand ANY home-services intent:
+
+Primary Call Intents
+
+Book appointment
+
+Request estimate
+
+Ask pricing
+
+Ask about services
+
+Ask availability
+
+Ask about coverage area
+
+Membership plan inquiry
+
+Service emergency
+
+Warranty question
+
+Reschedule / cancel
+
+Technician ETA
+
+Speak to human
+
+Complaint / concern
+
+Wrong number
+
+Meta Intents (system-level)
+
+Provide contact info
+
+Provide address
+
+Provide scheduling preference
+
+Provide job description
+
+Ask follow-up questions
+
+Provide photos/videos (if future MMS support)
+
+The LLM classifies each utterance into intent + confidence.
+
+⭐ SECTION 3 — UNIVERSAL FIELD EXTRACTION ENGINE
+
+Cortana must extract fields with dynamic logic:
+
+Universal fields:
+
+name
+
+phone
+
+email
+
+address
+
+zip code
+
+service category
+
+sub-service
+
+job details
+
+urgency
+
+preferred date/time
+
+alternate date/time
+
+membership status
+
+Industry-specific fields:
+
+Automatically loaded from the business profile.
+
+Example (Cleaning company):
+
+home type
+
+number of bedrooms
+
+square footage
+
+Example (HVAC):
+
+unit age
+
+system type
+
+symptoms
+
+Example (Roofing):
+
+roof age
+
+leak location
+
+Dynamic extraction schema is generated at call start:
+{
+  "required_fields": ["name", "address", "service_category"],
+  "business_custom_fields": ["Gate Code", "Home Type"],
+  "service_specific_fields": {
+     "HVAC": ["system_type", "symptom_description"],
+     "Electrical": ["breaker_type"]
+  }
+}
+
+
+Cortana ONLY asks for what’s needed for THAT business.
+
+⭐ SECTION 4 — UNIVERSAL APPOINTMENT ENGINE (ADAPTIVE)
+
+This is the scheduling layer that adapts to ANY service business.
+
+Appointment Fields:
+
+customer info
+
+service category
+
+service sub-type
+
+job duration
+
+urgency
+
+preferred window
+
+assigned technician or crew
+
+special instructions
+
+Appointment Workflows:
+
+real-time availability check
+
+technician skill matching
+
+region matching (zip codes)
+
+rules for emergency vs non-emergency
+
+rescheduling logic
+
+Calendar API supports:
+
+Google Calendar
+
+Outlook (future)
+
+iCal feed export
+
+⭐ SECTION 5 — UNIVERSAL DISPATCH ENGINE
+
+Dispatch logic MUST be industry-agnostic.
+
+Dispatch Modes (configurable per business):
+
+Round Robin
+
+Skill-Based Matching
+
+Location / Radius-Based
+
+Availability Matching
+
+Manual Assignment Mode
+
+Specialist First (ex: electrician must hold license)
+
+Emergency Mode (closest available technician)
+
+Dispatch Outputs:
+
+assigned technician
+
+SMS sent to technician
+
+dashboard updates
+
+dispatch record created
+
+⭐ SECTION 6 — UNIVERSAL KNOWLEDGE ENGINE
+
+Each business connects a knowledgebase:
+
+FAQs
+
+pricing models
+
+service descriptions
+
+warranty rules
+
+membership details
+
+escalation policies
+
+promotions
+
+allowed service areas
+
+appointment rules
+
+Cortana uses vector search to answer ANY question correctly for THAT business.
+
+This keeps it industry-agnostic.
+
+⭐ SECTION 7 — UNIVERSAL CRM AND CALL LOGGING SYSTEM
+
+Every call becomes a lead:
+
+Logged Data:
+
+caller info
+
+extracted fields
+
+intent history
+
+transcript
+
+outcome
+
+booking result
+
+technician assigned
+
+email/SMS status
+
+sentiment score
+
+follow-up tasks
+
+This makes your platform a real CRM alternative.
+
+⭐ SECTION 8 — UNIVERSAL UI ADAPTATION
+
+The dashboard adapts based on industry:
+
+Example:
+
+If the business is HVAC → show “System Type” slots.
+If the business is Cleaning → show “Bedrooms” fields.
+If the business is Electrical → show “Breaker Panel” fields.
+
+Everything is driven by the BusinessProfile model.
+
+⭐ SECTION 9 — UNIVERSAL EMAIL + SMS AUTOMATION
+Email (Mailchimp + SendGrid)
+
+confirmation
+
+reminders
+
+follow-up
+
+review request
+
+marketing drip
+
+SMS (Twilio)
+
+appointment confirmations
+
+technician assignment
+
+work order notifications
+
+emergencies
+
+Every business gets their own templates.
+
+⭐ SECTION 10 — UNIVERSAL ONBOARDING SYSTEM
+
+Add a new business in 5 minutes:
+
+Enter business info
+
+Select industry
+
+Upload service categories
+
+Add pricing rules
+
+Add technicians & skills
+
+Add business hours
+
+Upload knowledgebase
+
+Connect calendar
+
+Connect email provider
+
+Activate Cortana
+
+This becomes your SaaS onboarding flow.
+
+🔥 THE RESULT
+
+You have a single AI voice operating system that can power:
+
+HVAC companies
+
+Roofers
+
+Pest control
+
+Cleaners
+
+Electricians
+
+Landscapers
+
+Garage repair
+
+Locksmiths
+
+Painters
+
+Solar installers
+
+Appliance repair techs
+
+Pool services
+
+Handyman networks
+
+Moving companies
+
+Window cleaners
+
+ANY home service business
+
+No additional code per business.
+
+Just plug and play.
