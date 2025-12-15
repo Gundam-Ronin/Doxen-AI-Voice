@@ -446,7 +446,7 @@ async def add_service_category(
         required_fields=category.required_fields,
         default_duration_minutes=category.default_duration_minutes,
         allow_urgent=category.allow_urgent,
-        metadata=category.metadata
+        extra_data=category.extra_data
     )
     db.add(new_category)
     db.commit()

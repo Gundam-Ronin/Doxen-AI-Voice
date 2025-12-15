@@ -41,8 +41,8 @@ class UniversalAppointmentEngine:
     def _init_calendar(self):
         """Initialize Google Calendar service if available."""
         try:
-            from app.core.calendar import get_calendar_service
-            self.calendar_service = get_calendar_service()
+            from app.core.calendar import CalendarService
+            self.calendar_service = CalendarService()
         except Exception as e:
             print(f"Calendar initialization note: {e}")
     

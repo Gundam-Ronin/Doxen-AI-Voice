@@ -433,7 +433,7 @@ class RealtimeCallHandler:
                     existing.email = customer_data["email"]
                 if customer_data.get("address"):
                     existing.address = customer_data["address"]
-                existing.metadata = {**(existing.metadata or {}), **customer_data.get("metadata", {})}
+                existing.extra_data = {**(existing.extra_data or {}), **customer_data.get("extra_data", {})}
                 existing.updated_at = datetime.utcnow()
                 self.customer_id = existing.id
             else:
@@ -444,7 +444,7 @@ class RealtimeCallHandler:
                     email=customer_data.get("email"),
                     address=customer_data.get("address"),
                     zip_code=customer_data.get("zip_code"),
-                    metadata=customer_data.get("metadata", {}),
+                    extra_data=customer_data.get("extra_data", {}),
                     customer_type="lead",
                     source="phone"
                 )

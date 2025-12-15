@@ -302,7 +302,7 @@ Respond with JSON only. Use null for fields not found:
             "email": self.extracted_data.get("email"),
             "address": self.extracted_data.get("address"),
             "zip_code": self.extracted_data.get("zip_code"),
-            "metadata": {
+            "extra_data": {
                 k: v for k, v in self.extracted_data.items()
                 if k not in ["name", "phone", "email", "address", "zip_code"]
             }
