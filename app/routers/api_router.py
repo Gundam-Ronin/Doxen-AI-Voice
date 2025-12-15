@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from ..database.session import get_db
-from ..database.models import Business, Technician, CallLog
+from ..database.models import Business, Technician, CallLog, Call, Appointment
 from ..core.fallback import fallback_manager
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -176,13 +176,19 @@ async def list_calls(
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    calls = db.query(CallLog).filter(
+    legacy_calls = db.query(CallLog).filter(
         CallLog.business_id == business_id
     ).order_by(CallLog.timestamp.desc()).offset(offset).limit(limit).all()
     
-    return [
-        {
+    new_calls = db.query(Call).filter(
+        Call.business_id == business_id
+    ).order_by(Call.start_time.desc()).offset(offset).limit(limit).all()
+    
+    results = []
+    for c in legacy_calls:
+        results.append({
             "id": c.id,
+            "source": "legacy",
             "call_sid": c.call_sid,
             "caller_number": c.caller_number,
             "timestamp": c.timestamp.isoformat() if c.timestamp else None,
@@ -193,9 +199,29 @@ async def list_calls(
             "booked_appointment": c.booked_appointment,
             "is_emergency": c.is_emergency,
             "language": c.language
-        }
-        for c in calls
-    ]
+        })
+    
+    for c in new_calls:
+        is_emergency = any(i.get("intent") == "emergency" for i in (c.intents or []))
+        is_booked = c.outcome == "appointment_booked" or any(i.get("intent") == "book_appointment" for i in (c.intents or []))
+        results.append({
+            "id": c.id,
+            "source": "phase6",
+            "call_sid": c.call_sid,
+            "caller_number": c.caller_phone,
+            "timestamp": c.start_time.isoformat() if c.start_time else None,
+            "duration": c.duration_seconds,
+            "summary": c.call_summary,
+            "sentiment": c.sentiment,
+            "disposition": c.outcome,
+            "booked_appointment": is_booked,
+            "is_emergency": is_emergency,
+            "intents": c.intents,
+            "extracted_fields": c.extracted_fields
+        })
+    
+    results.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+    return results[:limit]
 
 @router.get("/calls/{call_id}")
 async def get_call_details(call_id: int, db: Session = Depends(get_db)):
@@ -232,31 +258,38 @@ async def get_business_stats(business_id: int, db: Session = Depends(get_db)):
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     
-    total_calls = db.query(func.count(CallLog.id)).filter(
-        CallLog.business_id == business_id
-    ).scalar()
+    legacy_total = db.query(func.count(CallLog.id)).filter(CallLog.business_id == business_id).scalar() or 0
+    new_total = db.query(func.count(Call.id)).filter(Call.business_id == business_id).scalar() or 0
+    total_calls = legacy_total + new_total
     
-    weekly_calls = db.query(func.count(CallLog.id)).filter(
-        CallLog.business_id == business_id,
-        CallLog.timestamp >= week_ago
-    ).scalar()
+    legacy_weekly = db.query(func.count(CallLog.id)).filter(
+        CallLog.business_id == business_id, CallLog.timestamp >= week_ago
+    ).scalar() or 0
+    new_weekly = db.query(func.count(Call.id)).filter(
+        Call.business_id == business_id, Call.start_time >= week_ago
+    ).scalar() or 0
+    weekly_calls = legacy_weekly + new_weekly
     
-    monthly_calls = db.query(func.count(CallLog.id)).filter(
-        CallLog.business_id == business_id,
-        CallLog.timestamp >= month_ago
-    ).scalar()
+    legacy_monthly = db.query(func.count(CallLog.id)).filter(
+        CallLog.business_id == business_id, CallLog.timestamp >= month_ago
+    ).scalar() or 0
+    new_monthly = db.query(func.count(Call.id)).filter(
+        Call.business_id == business_id, Call.start_time >= month_ago
+    ).scalar() or 0
+    monthly_calls = legacy_monthly + new_monthly
     
-    appointments_booked = db.query(func.count(CallLog.id)).filter(
-        CallLog.business_id == business_id,
-        CallLog.booked_appointment == True,
-        CallLog.timestamp >= month_ago
-    ).scalar()
+    legacy_appointments = db.query(func.count(CallLog.id)).filter(
+        CallLog.business_id == business_id, CallLog.booked_appointment == True, CallLog.timestamp >= month_ago
+    ).scalar() or 0
+    new_appointments = db.query(func.count(Appointment.id)).filter(
+        Appointment.business_id == business_id, Appointment.start_time >= month_ago
+    ).scalar() or 0
+    appointments_booked = legacy_appointments + new_appointments
     
-    emergencies = db.query(func.count(CallLog.id)).filter(
-        CallLog.business_id == business_id,
-        CallLog.is_emergency == True,
-        CallLog.timestamp >= month_ago
-    ).scalar()
+    legacy_emergencies = db.query(func.count(CallLog.id)).filter(
+        CallLog.business_id == business_id, CallLog.is_emergency == True, CallLog.timestamp >= month_ago
+    ).scalar() or 0
+    emergencies = legacy_emergencies
     
     conversion_rate = (appointments_booked / monthly_calls * 100) if monthly_calls > 0 else 0
     
