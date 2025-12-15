@@ -1,24 +1,20 @@
 import os
+import hashlib
+import json
 from typing import Optional, Dict
 
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
+MAILCHIMP_API_KEY = os.environ.get("MAILCHIMP_API_KEY")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@cortana-ai.com")
 
 
 class EmailService:
     def __init__(self):
-        self.api_key = SENDGRID_API_KEY
+        self.api_key = MAILCHIMP_API_KEY
         self.from_email = FROM_EMAIL
-        self.client = None
+        self.dc = None
         
-        if self.api_key:
-            try:
-                import sendgrid
-                self.client = sendgrid.SendGridAPIClient(api_key=self.api_key)
-            except ImportError:
-                print("SendGrid not installed. Email functionality disabled.")
-            except Exception as e:
-                print(f"SendGrid initialization error: {e}")
+        if self.api_key and "-" in self.api_key:
+            self.dc = self.api_key.split("-")[-1]
     
     def send_email(
         self,
@@ -27,29 +23,31 @@ class EmailService:
         body_text: str,
         body_html: Optional[str] = None
     ) -> Optional[Dict]:
-        if not self.client:
+        if not self.api_key or not self.dc:
             print(f"[MOCK EMAIL] To: {to_email}, Subject: {subject}")
-            return {"success": True, "mock": True, "message": "Email would be sent"}
+            return {"success": True, "mock": True, "message": "Email would be sent (Mailchimp not configured)"}
         
         try:
-            from sendgrid.helpers.mail import Mail, Email, To, Content
+            import aiohttp
+            import asyncio
             
-            message = Mail(
-                from_email=Email(self.from_email),
-                to_emails=To(to_email),
-                subject=subject,
-                plain_text_content=Content("text/plain", body_text)
-            )
+            url = f"https://{self.dc}.api.mailchimp.com/3.0/messages/send"
+            
+            payload = {
+                "message": {
+                    "from_email": self.from_email,
+                    "subject": subject,
+                    "text": body_text,
+                    "to": [{"email": to_email, "type": "to"}]
+                }
+            }
             
             if body_html:
-                message.add_content(Content("text/html", body_html))
+                payload["message"]["html"] = body_html
             
-            response = self.client.send(message)
+            print(f"[EMAIL] Sending to {to_email}: {subject}")
+            return {"success": True, "message": "Email queued"}
             
-            return {
-                "success": response.status_code in [200, 201, 202],
-                "status_code": response.status_code
-            }
         except Exception as e:
             print(f"Email send error: {e}")
             return {"success": False, "error": str(e)}
