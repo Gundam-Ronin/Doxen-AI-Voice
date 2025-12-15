@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .database.session import init_db, SessionLocal
-from .routers import twilio_router, api_router, knowledgebase_router, appointments, billing, stream_router, call_actions
+from .routers import twilio_router, api_router, knowledgebase_router, appointments, billing, stream_router, call_actions, business_router
 
 app = FastAPI(
     title="Cortana AI Voice System",
@@ -28,6 +28,7 @@ app.include_router(appointments.router)
 app.include_router(billing.router)
 app.include_router(stream_router.router)
 app.include_router(call_actions.router)
+app.include_router(business_router.router)
 
 @app.on_event("startup")
 async def startup_event():
