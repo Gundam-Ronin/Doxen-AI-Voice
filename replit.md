@@ -52,11 +52,13 @@ AI-driven voice automation SaaS platform for home-services businesses built by *
     technicians.js     - Team management
     settings.js        - Business settings
   /components
-    Sidebar.jsx        - Navigation
+    Sidebar.jsx        - Navigation with business switcher
     GlassCard.jsx      - Glassmorphic cards
     GlassButton.jsx    - Styled buttons
     TranscriptViewer.jsx - Real-time transcripts
     Layout.jsx         - Page layout
+  /contexts
+    BusinessContext.js - Business selection state with localStorage persistence
 ```
 
 ### Database Models
@@ -124,6 +126,12 @@ For real-time voice streaming with OpenAI's Realtime API:
 - PostgreSQL database models
 - Added OpenAI Realtime API WebSocket handler (December 12, 2025)
 - Added /twilio/realtime WebSocket endpoint for live voice streaming
+- **Business Switcher (December 15, 2025)**:
+  - Multi-tenant dashboard with business selector dropdown in sidebar
+  - Business context provider with localStorage persistence
+  - Dashboard stats and calls update dynamically when switching businesses
+  - Error handling for API failures with user feedback
+  - New frontend context: `frontend/contexts/BusinessContext.js`
 - **Phase 6 Implementation (December 15, 2025)**:
   - Universal Home Services Platform - multi-tenant support for ANY industry
   - Database schema extended with new tables (service_categories, customers, appointments, calls, call_transcripts, dispatch_logs, email_logs, sms_logs, business_settings)

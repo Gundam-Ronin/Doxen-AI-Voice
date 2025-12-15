@@ -3,8 +3,10 @@ import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import GlassCard from '../components/GlassCard';
 import TranscriptViewer from '../components/TranscriptViewer';
+import { useBusiness } from '../contexts/BusinessContext';
 
 export default function Dashboard() {
+  const { businessId, selectedBusiness, loading: businessLoading } = useBusiness();
   const [stats, setStats] = useState({
     total_calls: 0,
     weekly_calls: 0,
@@ -14,12 +16,13 @@ export default function Dashboard() {
     conversion_rate: 0
   });
   const [recentCalls, setRecentCalls] = useState([]);
-  const businessId = 1;
 
   useEffect(() => {
-    fetchStats();
-    fetchRecentCalls();
-  }, []);
+    if (businessId) {
+      fetchStats();
+      fetchRecentCalls();
+    }
+  }, [businessId]);
 
   const fetchStats = async () => {
     try {
@@ -49,7 +52,11 @@ export default function Dashboard() {
     <Layout title="Dashboard">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-        <p className="text-white/60">Welcome to Cortana AI Voice System</p>
+        <p className="text-white/60">
+          {businessLoading ? 'Loading...' : (
+            selectedBusiness ? `Viewing: ${selectedBusiness.name}` : 'Welcome to Cortana AI Voice System'
+          )}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
