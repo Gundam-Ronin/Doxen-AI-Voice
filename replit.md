@@ -124,6 +124,12 @@ For real-time voice streaming with OpenAI's Realtime API:
 - PostgreSQL database models
 - Added OpenAI Realtime API WebSocket handler (December 12, 2025)
 - Added /twilio/realtime WebSocket endpoint for live voice streaming
+- **Phase 6 Implementation (December 15, 2025)**:
+  - Universal Home Services Platform - multi-tenant support for ANY industry
+  - Database schema extended with new tables (service_categories, customers, appointments, calls, call_transcripts, dispatch_logs, email_logs, sms_logs, business_settings)
+  - New universal engines (intent, field extraction, dispatch, appointment)
+  - Business onboarding API with industry templates (HVAC, Plumbing, Electrical, Cleaning, etc.)
+  - Call persistence now saves to both legacy CallLog and new Call tables
 - **Phase 7 Implementation (December 13, 2025)**:
   - Google Calendar integration using Replit's connector (OAuth)
   - Customer data extraction (name, phone, email, address) from speech using regex + AI

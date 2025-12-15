@@ -170,10 +170,14 @@ class UniversalAppointmentEngine:
             if not self.calendar_service:
                 return busy_times
             
+            service = getattr(self.calendar_service, 'service', None)
+            if not service:
+                return busy_times
+            
             time_min = start_date.isoformat() + "Z"
             time_max = (start_date + timedelta(days=days)).isoformat() + "Z"
             
-            events_result = self.calendar_service.events().list(
+            events_result = service.events().list(
                 calendarId=calendar_id,
                 timeMin=time_min,
                 timeMax=time_max,
@@ -295,11 +299,13 @@ class UniversalAppointmentEngine:
             google_event_id = None
             if self.calendar_service:
                 try:
-                    created_event = self.calendar_service.events().insert(
-                        calendarId=calendar_id,
-                        body=event
-                    ).execute()
-                    google_event_id = created_event.get("id")
+                    service = getattr(self.calendar_service, 'service', None)
+                    if service:
+                        created_event = service.events().insert(
+                            calendarId=calendar_id,
+                            body=event
+                        ).execute()
+                        google_event_id = created_event.get("id")
                 except Exception as e:
                     print(f"Calendar booking error: {e}")
             
@@ -336,7 +342,15 @@ class UniversalAppointmentEngine:
                 calendar_id = "primary"
             
             if self.calendar_service and original_event_id:
-                event = self.calendar_service.events().get(
+                service = getattr(self.calendar_service, 'service', None)
+                if not service:
+                    return BookingResult(
+                        success=False,
+                        error="Calendar service not connected",
+                        message="Could not reschedule appointment"
+                    )
+                
+                event = service.events().get(
                     calendarId=calendar_id,
                     eventId=original_event_id
                 ).execute()
@@ -344,7 +358,7 @@ class UniversalAppointmentEngine:
                 event["start"]["dateTime"] = new_slot.start.isoformat()
                 event["end"]["dateTime"] = new_slot.end.isoformat()
                 
-                updated_event = self.calendar_service.events().update(
+                updated_event = service.events().update(
                     calendarId=calendar_id,
                     eventId=original_event_id,
                     body=event
@@ -387,10 +401,12 @@ class UniversalAppointmentEngine:
                 calendar_id = "primary"
             
             if self.calendar_service and event_id:
-                self.calendar_service.events().delete(
-                    calendarId=calendar_id,
-                    eventId=event_id
-                ).execute()
+                service = getattr(self.calendar_service, 'service', None)
+                if service:
+                    service.events().delete(
+                        calendarId=calendar_id,
+                        eventId=event_id
+                    ).execute()
                 
                 return {
                     "success": True,
