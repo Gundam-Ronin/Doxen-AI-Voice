@@ -6,6 +6,9 @@ import { useBusiness } from '../contexts/BusinessContext';
 const menuItems = [
   { name: 'Dashboard', path: '/', icon: '📊' },
   { name: 'Live Calls', path: '/calls', icon: '📞' },
+  { name: 'Analytics', path: '/analytics', icon: '📈' },
+  { name: 'Quotes', path: '/quotes', icon: '💰' },
+  { name: 'Outbound', path: '/outbound', icon: '📤' },
   { name: 'Knowledgebase', path: '/knowledgebase', icon: '📚' },
   { name: 'Personality', path: '/personality', icon: '🤖' },
   { name: 'Technicians', path: '/technicians', icon: '👷' },
