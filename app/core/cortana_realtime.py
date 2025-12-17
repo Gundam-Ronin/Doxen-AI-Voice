@@ -19,6 +19,9 @@ from .universal_field_extractor import universal_field_extractor, ExtractionSche
 from .universal_dispatch_engine import universal_dispatch_engine
 from .universal_appointment_engine import universal_appointment_engine
 from .dispatcher import dispatcher
+from .email_service import email_service
+from .outbound_calling import outbound_calling_engine, OutboundCallRequest, OutboundCallType
+from .quote_generator import quote_generator
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -368,6 +371,10 @@ class RealtimeCallHandler:
             await self.start_booking_flow()
         elif intent == UniversalIntent.CONFIRMATION and self.pending_slot:
             await self.confirm_booking()
+        elif intent == UniversalIntent.REQUEST_QUOTE or intent == UniversalIntent.ASK_PRICING:
+            await self.handle_pricing_request()
+        elif intent == UniversalIntent.REQUEST_CALLBACK:
+            await self.handle_callback_request()
         elif intent == UniversalIntent.RESCHEDULE:
             pass
         elif intent == UniversalIntent.CANCEL:
@@ -448,6 +455,94 @@ class RealtimeCallHandler:
             
         except Exception as e:
             print(f"Booking error: {e}")
+    
+    async def handle_pricing_request(self):
+        """Handle customer pricing/quote request - send email with quote."""
+        try:
+            customer_data = universal_field_extractor.to_customer_record()
+            customer_email = customer_data.get("email")
+            customer_name = customer_data.get("name", "Customer")
+            customer_phone = customer_data.get("phone_number") or self.caller_number
+            
+            service_type = universal_field_extractor.extracted_data.get("service_category", "General Service")
+            job_details = universal_field_extractor.extracted_data.get("job_details", "")
+            
+            quote = quote_generator.generate_quote(
+                business_id=self.business_id,
+                service_type=service_type,
+                job_description=job_details
+            )
+            
+            if customer_email:
+                email_body = f"""
+Hello {customer_name},
+
+Thank you for your interest in {self.business.get('name', 'our services')}!
+
+Here is your requested pricing information for {service_type}:
+
+{quote.get('description', 'Please contact us for a detailed quote.')}
+
+Estimated Cost: ${quote.get('estimated_total', 'Contact for quote')}
+
+To schedule your service, please call us back or reply to this email.
+
+Best regards,
+{self.business.get('name', 'Our Team')}
+"""
+                email_service.send_email(
+                    to_email=customer_email,
+                    subject=f"Your Quote from {self.business.get('name', 'Our Company')}",
+                    body_text=email_body
+                )
+                print(f"Quote email sent to: {customer_email}")
+            else:
+                if customer_phone and customer_phone != "Unknown":
+                    dispatcher.send_sms(
+                        customer_phone,
+                        f"Thanks for calling {self.business.get('name', 'us')}! Your estimated price for {service_type}: ${quote.get('estimated_total', 'Contact for details')}. Reply for more info!"
+                    )
+                    print(f"Quote SMS sent to: {customer_phone}")
+            
+            print(f"Pricing request handled for {service_type}")
+            
+        except Exception as e:
+            print(f"Pricing request error: {e}")
+    
+    async def handle_callback_request(self):
+        """Schedule a callback for the customer."""
+        try:
+            customer_data = universal_field_extractor.to_customer_record()
+            customer_phone = customer_data.get("phone_number") or self.caller_number
+            customer_name = customer_data.get("name", "Customer")
+            
+            if customer_phone and customer_phone != "Unknown":
+                from datetime import timedelta
+                
+                callback_request = OutboundCallRequest(
+                    call_type=OutboundCallType.MISSED_CALL_FOLLOWUP,
+                    customer_phone=customer_phone,
+                    customer_name=customer_name,
+                    business_id=self.business_id,
+                    business_name=self.business.get("name", "Our Company"),
+                    scheduled_time=datetime.now() + timedelta(minutes=5),
+                    priority=9,
+                    context={"reason": "customer_requested_callback"}
+                )
+                
+                success = outbound_calling_engine.queue_call(callback_request)
+                
+                if success:
+                    print(f"Callback scheduled for {customer_phone} in 5 minutes")
+                    dispatcher.send_sms(
+                        customer_phone,
+                        f"We'll call you back in about 5 minutes! - {self.business.get('name', 'Our Team')}"
+                    )
+            else:
+                print("No phone number available for callback")
+            
+        except Exception as e:
+            print(f"Callback scheduling error: {e}")
     
     async def _create_or_update_customer(self, customer_data: dict) -> dict:
         """Create or update customer record in database."""

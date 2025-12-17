@@ -1,20 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import Layout from '../components/Layout';
 import GlassCard from '../components/GlassCard';
 import TranscriptViewer from '../components/TranscriptViewer';
+import { BusinessContext } from '../contexts/BusinessContext';
 
 export default function Calls() {
+  const { selectedBusiness } = useContext(BusinessContext);
   const [calls, setCalls] = useState([]);
   const [selectedCall, setSelectedCall] = useState(null);
   const [activeCalls, setActiveCalls] = useState([]);
-  const businessId = 1;
+  const businessId = selectedBusiness?.id || 1;
 
   useEffect(() => {
     fetchCalls();
     fetchActiveCalls();
     const interval = setInterval(fetchActiveCalls, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [businessId]);
 
   const fetchCalls = async () => {
     try {

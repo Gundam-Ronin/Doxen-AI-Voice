@@ -30,6 +30,7 @@ class UniversalIntent(str, Enum):
     CONFIRMATION = "confirmation"
     DECLINE = "decline"
     FOLLOW_UP = "follow_up"
+    REQUEST_CALLBACK = "request_callback"
     GENERAL_QUESTION = "general_question"
     GREETING = "greeting"
     GOODBYE = "goodbye"
@@ -56,6 +57,7 @@ INTENT_DESCRIPTIONS = {
     UniversalIntent.CONFIRMATION: "Customer confirming something (yes, correct, that works)",
     UniversalIntent.DECLINE: "Customer declining an offer or suggestion",
     UniversalIntent.FOLLOW_UP: "Customer following up on previous service or inquiry",
+    UniversalIntent.REQUEST_CALLBACK: "Customer asking to be called back later or requesting a callback",
     UniversalIntent.GENERAL_QUESTION: "General question about the business",
     UniversalIntent.GREETING: "Simple greeting (hello, hi)",
     UniversalIntent.GOODBYE: "Ending the conversation",
