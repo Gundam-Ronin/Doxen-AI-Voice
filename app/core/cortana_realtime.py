@@ -138,16 +138,25 @@ class RealtimeCallHandler:
     
     async def handle(self):
         """Main entry point for handling the realtime call."""
-        await self.websocket.accept()
+        print(f"[REALTIME] WebSocket handler started for business_id: {self.business_id}")
+        
+        try:
+            await self.websocket.accept()
+            print("[REALTIME] Twilio WebSocket accepted")
+        except Exception as e:
+            print(f"[REALTIME] Failed to accept WebSocket: {e}")
+            return
         
         self._load_business()
+        print(f"[REALTIME] Business loaded: {self.business.get('name') if self.business else 'None'}")
         
         try:
             if not OPENAI_API_KEY:
-                print("OpenAI API key not configured")
+                print("[REALTIME] ERROR: OpenAI API key not configured")
                 await self.websocket.close(code=1011, reason="Service unavailable")
                 return
             
+            print(f"[REALTIME] Connecting to OpenAI Realtime API...")
             self.openai_ws = await websockets.connect(
                 OPENAI_REALTIME_URL,
                 additional_headers={
