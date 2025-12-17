@@ -156,6 +156,30 @@ class RealtimeCallHandler:
                 await self.websocket.close(code=1011, reason="Service unavailable")
                 return
             
+            await asyncio.gather(
+                self.connect_to_openai(),
+                self.receive_from_twilio(),
+                self.send_keepalive()
+            )
+            
+        except websockets.exceptions.WebSocketException as e:
+            print(f"OpenAI WebSocket connection failed: {e}")
+            try:
+                await self.websocket.close(code=1011, reason="AI service unavailable")
+            except:
+                pass
+        except Exception as e:
+            print(f"Realtime connection error: {e}")
+            try:
+                await self.websocket.close(code=1011, reason="Internal error")
+            except:
+                pass
+        finally:
+            await self.cleanup()
+    
+    async def connect_to_openai(self):
+        """Connect to OpenAI Realtime API and configure session."""
+        try:
             print(f"[REALTIME] Connecting to OpenAI Realtime API...")
             self.openai_ws = await websockets.connect(
                 OPENAI_REALTIME_URL,
@@ -168,11 +192,10 @@ class RealtimeCallHandler:
             )
             
             if not self.openai_ws:
-                print("Failed to connect to OpenAI Realtime")
-                await self.websocket.close(code=1011, reason="AI connection failed")
+                print("[REALTIME] Failed to connect to OpenAI Realtime")
                 return
             
-            print("OpenAI Realtime connected")
+            print("[REALTIME] OpenAI Realtime connected successfully")
             
             system_prompt = generate_system_prompt(self.business)
             
@@ -195,28 +218,14 @@ class RealtimeCallHandler:
                 }
             }
             await self.openai_ws.send(json.dumps(session_update))
-            print(f"Session configured for business: {self.business.get('name')}")
+            print(f"[REALTIME] Session configured for business: {self.business.get('name') if self.business else 'Unknown'}")
             
-            await asyncio.gather(
-                self.receive_from_twilio(),
-                self.receive_from_openai(),
-                self.send_keepalive()
-            )
+            await self.receive_from_openai()
             
         except websockets.exceptions.WebSocketException as e:
-            print(f"OpenAI WebSocket connection failed: {e}")
-            try:
-                await self.websocket.close(code=1011, reason="AI service unavailable")
-            except:
-                pass
+            print(f"[REALTIME] OpenAI connection error: {e}")
         except Exception as e:
-            print(f"Realtime connection error: {e}")
-            try:
-                await self.websocket.close(code=1011, reason="Internal error")
-            except:
-                pass
-        finally:
-            await self.cleanup()
+            print(f"[REALTIME] Error in connect_to_openai: {e}")
     
     async def send_keepalive(self):
         """Send periodic mark events to prevent Twilio timeout."""
