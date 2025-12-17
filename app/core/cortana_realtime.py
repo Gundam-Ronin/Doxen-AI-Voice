@@ -467,10 +467,13 @@ class RealtimeCallHandler:
             service_type = universal_field_extractor.extracted_data.get("service_category", "General Service")
             job_details = universal_field_extractor.extracted_data.get("job_details", "")
             
+            industry = self.business.get("industry", "hvac") if self.business else "hvac"
+            customer_data = universal_field_extractor.to_customer_record()
             quote = quote_generator.generate_quote(
-                business_id=self.business_id,
+                industry=industry,
                 service_type=service_type,
-                job_description=job_details
+                customer_data=customer_data,
+                job_details={"description": job_details}
             )
             
             if customer_email:
@@ -481,9 +484,9 @@ Thank you for your interest in {self.business.get('name', 'our services')}!
 
 Here is your requested pricing information for {service_type}:
 
-{quote.get('description', 'Please contact us for a detailed quote.')}
+{quote.description if hasattr(quote, 'description') else 'Please contact us for a detailed quote.'}
 
-Estimated Cost: ${quote.get('estimated_total', 'Contact for quote')}
+Estimated Cost: ${quote.total if hasattr(quote, 'total') else 'Contact for quote'}
 
 To schedule your service, please call us back or reply to this email.
 
@@ -498,9 +501,11 @@ Best regards,
                 print(f"Quote email sent to: {customer_email}")
             else:
                 if customer_phone and customer_phone != "Unknown":
+                    business_name = self.business.get('name', 'us') if self.business else 'us'
+                    quote_total = quote.total if hasattr(quote, 'total') else 'Contact for details'
                     dispatcher.send_sms(
                         customer_phone,
-                        f"Thanks for calling {self.business.get('name', 'us')}! Your estimated price for {service_type}: ${quote.get('estimated_total', 'Contact for details')}. Reply for more info!"
+                        f"Thanks for calling {business_name}! Your estimated price for {service_type}: ${quote_total}. Reply for more info!"
                     )
                     print(f"Quote SMS sent to: {customer_phone}")
             

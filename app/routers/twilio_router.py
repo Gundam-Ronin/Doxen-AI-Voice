@@ -222,15 +222,32 @@ async def handle_sms(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/stream")
-async def stream_twiml(request: Request):
+async def stream_twiml(request: Request, db: Session = Depends(get_db)):
+    form_data = await request.form()
+    from_number = form_data.get("From", "Unknown")
+    to_number = form_data.get("To", "")
+    call_sid = form_data.get("CallSid", "")
+    
+    business = db.query(Business).filter(Business.phone_number == to_number).first()
+    if not business:
+        business = db.query(Business).first()
+    
+    business_id = business.id if business else 1
+    
     host = request.headers.get("host", "doxen-ai-voice--doxenstrategy.replit.app")
     ws_url = f"wss://{host}/twilio/realtime"
+    
+    print(f"[TWILIO STREAM] Call from {from_number}, CallSID: {call_sid}, Business: {business_id}")
     
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Please hold while we connect you to our AI assistant.</Say>
     <Connect>
-        <Stream url="{ws_url}" />
+        <Stream url="{ws_url}">
+            <Parameter name="from" value="{from_number}" />
+            <Parameter name="business_id" value="{business_id}" />
+            <Parameter name="call_sid" value="{call_sid}" />
+        </Stream>
     </Connect>
 </Response>"""
     return Response(content=twiml, media_type="application/xml")
