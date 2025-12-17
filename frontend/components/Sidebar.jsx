@@ -12,6 +12,7 @@ const menuItems = [
   { name: 'Knowledgebase', path: '/knowledgebase', icon: '📚' },
   { name: 'Personality', path: '/personality', icon: '🤖' },
   { name: 'Technicians', path: '/technicians', icon: '👷' },
+  { name: 'Pricing', path: '/pricing', icon: '💎' },
   { name: 'Settings', path: '/settings', icon: '⚙️' },
 ];
 
