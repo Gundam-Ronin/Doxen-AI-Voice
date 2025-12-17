@@ -26,7 +26,7 @@ from .quote_generator import quote_generator
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 OPENAI_REALTIME_URL = (
-    "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+    "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
 )
 
 
@@ -150,11 +150,12 @@ class RealtimeCallHandler:
             
             self.openai_ws = await websockets.connect(
                 OPENAI_REALTIME_URL,
-                extra_headers={
+                additional_headers={
                     "Authorization": f"Bearer {OPENAI_API_KEY}",
                     "OpenAI-Beta": "realtime=v1"
                 },
-                subprotocols=["realtime"]
+                subprotocols=["realtime"],
+                open_timeout=30
             )
             
             if not self.openai_ws:
