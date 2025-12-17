@@ -154,6 +154,7 @@ class RealtimeCallHandler:
                     "Authorization": f"Bearer {OPENAI_API_KEY}",
                     "OpenAI-Beta": "realtime=v1"
                 },
+                subprotocols=["realtime"]
             )
             
             if not self.openai_ws:
