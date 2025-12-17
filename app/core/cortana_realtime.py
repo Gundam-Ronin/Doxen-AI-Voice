@@ -185,7 +185,8 @@ class RealtimeCallHandler:
             
             await asyncio.gather(
                 self.receive_from_twilio(),
-                self.receive_from_openai()
+                self.receive_from_openai(),
+                self.send_keepalive()
             )
             
         except websockets.exceptions.WebSocketException as e:
@@ -202,6 +203,26 @@ class RealtimeCallHandler:
                 pass
         finally:
             await self.cleanup()
+    
+    async def send_keepalive(self):
+        """Send periodic mark events to prevent Twilio timeout."""
+        try:
+            while True:
+                await asyncio.sleep(30)
+                if self.stream_sid:
+                    mark_event = {
+                        "event": "mark",
+                        "streamSid": self.stream_sid,
+                        "mark": {"name": "keepalive"}
+                    }
+                    try:
+                        await self.websocket.send_text(json.dumps(mark_event))
+                    except:
+                        break
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Keepalive error: {e}")
     
     async def receive_from_twilio(self):
         """Handle incoming messages from Twilio."""
@@ -227,6 +248,21 @@ class RealtimeCallHandler:
                     print(f"Twilio stream started: {self.stream_sid}, Call SID: {self.call_sid}, Business: {self.business_id}")
                     
                     call_manager.start_call(self.call_sid, self.business_id, self.caller_number)
+                    
+                    try:
+                        db = SessionLocal()
+                        active_call = ActiveCall(
+                            call_sid=self.call_sid,
+                            business_id=self.business_id,
+                            caller_number=self.caller_number,
+                            status="in_progress"
+                        )
+                        db.add(active_call)
+                        db.commit()
+                        db.close()
+                        print(f"ActiveCall created in database: {self.call_sid}")
+                    except Exception as e:
+                        print(f"Error creating ActiveCall: {e}")
                     universal_field_extractor.reset()
                     universal_field_extractor.extracted_data["phone"] = self.caller_number if self.caller_number != "Unknown" else None
                     
@@ -642,6 +678,19 @@ class RealtimeCallHandler:
         
         if self.call_sid:
             call_manager.end_call(self.call_sid)
+            
+            try:
+                db = SessionLocal()
+                active_call = db.query(ActiveCall).filter(
+                    ActiveCall.call_sid == self.call_sid
+                ).first()
+                if active_call:
+                    db.delete(active_call)
+                    db.commit()
+                    print(f"ActiveCall removed from database: {self.call_sid}")
+                db.close()
+            except Exception as e:
+                print(f"Error removing ActiveCall: {e}")
         
         universal_field_extractor.reset()
         print("Realtime session ended")
