@@ -1,11 +1,11 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import GlassCard from '../components/GlassCard';
 import TranscriptViewer from '../components/TranscriptViewer';
-import { BusinessContext } from '../contexts/BusinessContext';
+import { useBusiness } from '../contexts/BusinessContext';
 
 export default function Calls() {
-  const { selectedBusiness } = useContext(BusinessContext);
+  const { selectedBusiness } = useBusiness();
   const [calls, setCalls] = useState([]);
   const [selectedCall, setSelectedCall] = useState(null);
   const [activeCalls, setActiveCalls] = useState([]);
