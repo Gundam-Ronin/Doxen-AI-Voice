@@ -192,15 +192,27 @@ class RealtimeCallHandler:
         """Connect to OpenAI Realtime API and configure session."""
         try:
             print(f"[REALTIME] Connecting to OpenAI Realtime API...")
-            self.openai_ws = await websockets.connect(
-                OPENAI_REALTIME_URL,
-                additional_headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "OpenAI-Beta": "realtime=v1"
-                },
-                subprotocols=["realtime"],
-                open_timeout=30
-            )
+            print(f"[REALTIME] OpenAI API key present: {bool(OPENAI_API_KEY)}")
+            print(f"[REALTIME] OpenAI URL: {OPENAI_REALTIME_URL}")
+            
+            try:
+                self.openai_ws = await asyncio.wait_for(
+                    websockets.connect(
+                        OPENAI_REALTIME_URL,
+                        additional_headers={
+                            "Authorization": f"Bearer {OPENAI_API_KEY}",
+                            "OpenAI-Beta": "realtime=v1"
+                        },
+                        open_timeout=15
+                    ),
+                    timeout=20
+                )
+            except asyncio.TimeoutError:
+                print("[REALTIME] OpenAI connection timed out!")
+                return
+            except Exception as conn_err:
+                print(f"[REALTIME] OpenAI connection failed: {type(conn_err).__name__}: {conn_err}")
+                return
             
             if not self.openai_ws:
                 print("[REALTIME] Failed to connect to OpenAI Realtime")
