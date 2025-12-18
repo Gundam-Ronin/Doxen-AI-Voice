@@ -26,7 +26,7 @@ from .quote_generator import quote_generator
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 OPENAI_REALTIME_URL = (
-    "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
+    "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
 )
 
 
@@ -81,6 +81,8 @@ class RealtimeCallHandler:
         self.stream_sid = None
         self.call_sid = None
         self.openai_ws = None
+        self.openai_ready = asyncio.Event()  # Signals when OpenAI is connected and ready
+        self.audio_buffer = []  # Buffer audio until OpenAI is ready
         self.transcripts = []
         self.business_id = business_id or 1
         self.business = None
@@ -197,11 +199,19 @@ class RealtimeCallHandler:
             
             print("[REALTIME] OpenAI Realtime connected successfully")
             
+            # Start receiving from OpenAI immediately in a separate task
+            # so we don't miss any responses
+            receive_task = asyncio.create_task(self.receive_from_openai())
+            
+            # Wait for session.created before sending our configuration
+            await asyncio.sleep(0.3)
+            
             system_prompt = generate_system_prompt(self.business)
             
             session_update = {
                 "type": "session.update",
                 "session": {
+                    "modalities": ["text", "audio"],
                     "voice": "alloy",
                     "instructions": system_prompt,
                     "input_audio_format": "g711_ulaw",
@@ -220,7 +230,47 @@ class RealtimeCallHandler:
             await self.openai_ws.send(json.dumps(session_update))
             print(f"[REALTIME] Session configured for business: {self.business.get('name') if self.business else 'Unknown'}")
             
-            await self.receive_from_openai()
+            # Wait for session to be updated before sending greeting
+            await asyncio.sleep(0.5)
+            
+            # Trigger OpenAI to speak first with a greeting
+            business_name = self.business.get('name', 'our company') if self.business else 'our company'
+            initial_message = {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": f"A customer just called {business_name}. Greet them warmly and ask how you can help."
+                        }
+                    ]
+                }
+            }
+            await self.openai_ws.send(json.dumps(initial_message))
+            print("[REALTIME] Sent initial greeting trigger to OpenAI")
+            
+            # Request a response from OpenAI with explicit audio output
+            response_create = {
+                "type": "response.create",
+                "response": {
+                    "modalities": ["text", "audio"]
+                }
+            }
+            await self.openai_ws.send(json.dumps(response_create))
+            print("[REALTIME] Requested initial audio response from OpenAI")
+            
+            # Signal that OpenAI is ready and flush any buffered audio
+            self.openai_ready.set()
+            if self.audio_buffer:
+                print(f"[REALTIME] Flushing {len(self.audio_buffer)} buffered audio chunks to OpenAI")
+                for audio_chunk in self.audio_buffer:
+                    await self.openai_ws.send(json.dumps(audio_chunk))
+                self.audio_buffer.clear()
+            
+            # Wait for the receive task to complete
+            await receive_task
             
         except websockets.exceptions.WebSocketException as e:
             print(f"[REALTIME] OpenAI connection error: {e}")
@@ -295,8 +345,13 @@ class RealtimeCallHandler:
                         "type": "input_audio_buffer.append",
                         "audio": audio_payload
                     }
-                    if self.openai_ws:
+                    if self.openai_ready.is_set() and self.openai_ws:
+                        # OpenAI is ready, send directly
                         await self.openai_ws.send(json.dumps(audio_append))
+                    else:
+                        # Buffer audio until OpenAI is ready (limit buffer size)
+                        if len(self.audio_buffer) < 500:  # ~10 seconds of audio
+                            self.audio_buffer.append(audio_append)
                     
                 elif data["event"] == "stop":
                     print("Twilio stream stopped")
@@ -310,12 +365,31 @@ class RealtimeCallHandler:
     async def receive_from_openai(self):
         """Handle incoming messages from OpenAI."""
         if not self.openai_ws:
+            print("[REALTIME] receive_from_openai called but no OpenAI connection")
             return
+        
+        print("[REALTIME] Starting to receive from OpenAI...")
+        audio_chunk_count = 0
+        
         try:
             async for message in self.openai_ws:
                 response = json.loads(message)
+                response_type = response.get("type", "unknown")
                 
-                if response["type"] == "response.audio.delta":
+                # Log all non-audio events for debugging
+                if response_type != "response.audio.delta":
+                    print(f"[OPENAI] Event: {response_type}")
+                
+                if response_type == "session.created":
+                    print("[OPENAI] Session created successfully")
+                    
+                elif response_type == "session.updated":
+                    print("[OPENAI] Session updated with our configuration")
+                
+                elif response_type == "response.audio.delta":
+                    audio_chunk_count += 1
+                    if audio_chunk_count == 1:
+                        print(f"[OPENAI] Receiving audio from AI...")
                     if self.stream_sid:
                         audio_delta = {
                             "event": "media",
@@ -324,10 +398,18 @@ class RealtimeCallHandler:
                                 "payload": response["delta"]
                             }
                         }
-                        await self.websocket.send_text(json.dumps(audio_delta))
+                        try:
+                            await self.websocket.send_text(json.dumps(audio_delta))
+                        except Exception as e:
+                            print(f"[REALTIME] Error sending audio to Twilio: {e}")
+                            break
+                
+                elif response_type == "response.audio.done":
+                    print(f"[OPENAI] Audio response complete ({audio_chunk_count} chunks sent)")
+                    audio_chunk_count = 0
                         
-                elif response["type"] == "input_audio_buffer.speech_started":
-                    print("User started speaking")
+                elif response_type == "input_audio_buffer.speech_started":
+                    print("[OPENAI] User started speaking")
                     if self.stream_sid:
                         clear_event = {
                             "event": "clear",
@@ -335,21 +417,41 @@ class RealtimeCallHandler:
                         }
                         await self.websocket.send_text(json.dumps(clear_event))
                         
-                elif response["type"] == "conversation.item.input_audio_transcription.completed":
+                elif response_type == "conversation.item.input_audio_transcription.completed":
                     transcript = response.get("transcript", "")
                     if transcript:
                         await self.handle_customer_speech(transcript)
                     
-                elif response["type"] == "response.audio_transcript.done":
+                elif response_type == "response.audio_transcript.done":
                     transcript = response.get("transcript", "")
                     if transcript:
                         await self.handle_cortana_speech(transcript)
                     
-                elif response["type"] == "error":
-                    print(f"OpenAI error: {response}")
+                elif response_type == "response.done":
+                    # Log the full response for debugging
+                    resp = response.get("response", {})
+                    status = resp.get("status", "unknown")
+                    output = resp.get("output", [])
+                    print(f"[OPENAI] Response done - status: {status}, outputs: {len(output)}")
+                    if output:
+                        for item in output:
+                            item_type = item.get("type", "unknown")
+                            content = item.get("content", [])
+                            print(f"[OPENAI]   Output item: {item_type}, content items: {len(content)}")
+                            for c in content:
+                                c_type = c.get("type", "unknown")
+                                print(f"[OPENAI]     Content: {c_type}")
+                    # Check for failed status
+                    if status == "failed":
+                        status_details = resp.get("status_details", {})
+                        print(f"[OPENAI] Response FAILED: {status_details}")
+                
+                elif response_type == "error":
+                    error_info = response.get("error", {})
+                    print(f"[OPENAI] ERROR: {error_info.get('message', response)}")
                     
         except Exception as e:
-            print(f"OpenAI receive error: {e}")
+            print(f"[REALTIME] OpenAI receive error: {type(e).__name__}: {e}")
     
     async def handle_customer_speech(self, transcript: str):
         """Process customer speech with universal intent detection and field extraction."""
