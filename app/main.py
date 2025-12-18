@@ -79,10 +79,16 @@ FRONTEND_DIR = "frontend/out"
 
 @app.get("/")
 async def serve_index():
+    """Root endpoint - serves frontend or returns API status."""
+    return {"status": "ok", "message": "Cortana AI Voice System", "version": "1.0.0"}
+
+@app.get("/app")
+async def serve_app():
+    """Serve the frontend application."""
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path, media_type="text/html")
-    return {"status": "ok", "message": "Cortana AI Voice System API", "docs": "/docs"}
+    return {"error": "Frontend not built"}
 
 if os.path.exists(FRONTEND_DIR):
     app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="next_static")
