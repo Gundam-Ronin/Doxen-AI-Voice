@@ -49,6 +49,11 @@ async def startup_event():
         finally:
             db.close()
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment monitoring."""
+    return {"status": "healthy"}
+
 @app.get("/api/info")
 async def get_info():
     return {
@@ -77,7 +82,7 @@ async def serve_index():
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path, media_type="text/html")
-    return {"message": "Cortana AI Voice System API", "docs": "/docs"}
+    return {"status": "ok", "message": "Cortana AI Voice System API", "docs": "/docs"}
 
 if os.path.exists(FRONTEND_DIR):
     app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="next_static")
