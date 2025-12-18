@@ -22,6 +22,7 @@ from .dispatcher import dispatcher
 from .email_service import email_service
 from .outbound_calling import outbound_calling_engine, OutboundCallRequest, OutboundCallType
 from .quote_generator import quote_generator
+from .vector_search import get_relevant_context
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -30,8 +31,8 @@ OPENAI_REALTIME_URL = (
 )
 
 
-def generate_system_prompt(business: dict) -> str:
-    """Generate a dynamic system prompt based on business profile."""
+def generate_system_prompt(business: dict, kb_context: str = "") -> str:
+    """Generate a dynamic system prompt based on business profile and knowledge base."""
     business_name = business.get("name", "our company")
     industry = business.get("industry", "home services")
     personality = business.get("ai_personality", "friendly and professional")
@@ -49,6 +50,14 @@ def generate_system_prompt(business: dict) -> str:
     if custom_fields:
         field_names = [f.get("field_name", "") for f in custom_fields[:3]]
         additional_questions = f"\n- If relevant, ask about: {', '.join(field_names)}"
+    
+    kb_section = ""
+    if kb_context:
+        kb_section = f"""
+
+KNOWLEDGE BASE - Use this information to answer customer questions:
+{kb_context}
+"""
     
     return f"""You are Cortana, the AI voice assistant for {business_name}, a {industry} company. You are {personality}. Your goals are to:
 1. Answer customer questions about services and pricing
@@ -70,7 +79,7 @@ IMPORTANT BEHAVIORS:
 - For emergencies, reassure the customer and let them know a technician will be dispatched immediately
 - Always confirm important details by repeating them back
 - Be warm but efficient - respect the caller's time
-- If you don't know specific pricing, offer to have someone call them back with a quote"""
+- If you don't know specific pricing, offer to have someone call them back with a quote{kb_section}"""
 
 
 class RealtimeCallHandler:
@@ -206,7 +215,14 @@ class RealtimeCallHandler:
             # Wait for session.created before sending our configuration
             await asyncio.sleep(0.3)
             
-            system_prompt = generate_system_prompt(self.business)
+            # Fetch knowledge base context for this business
+            kb_context = ""
+            try:
+                kb_context = get_relevant_context("services pricing hours policies", self.business_id)
+            except Exception as e:
+                print(f"[REALTIME] KB context fetch error: {e}")
+            
+            system_prompt = generate_system_prompt(self.business, kb_context)
             
             session_update = {
                 "type": "session.update",
@@ -498,11 +514,11 @@ class RealtimeCallHandler:
         elif intent == UniversalIntent.REQUEST_CALLBACK:
             await self.handle_callback_request()
         elif intent == UniversalIntent.RESCHEDULE:
-            pass
+            await self.handle_reschedule_request()
         elif intent == UniversalIntent.CANCEL:
-            pass
+            await self.handle_cancel_request()
         elif intent == UniversalIntent.SPEAK_TO_HUMAN:
-            pass
+            await self.handle_transfer_to_human()
     
     async def handle_cortana_speech(self, transcript: str):
         """Track Cortana's responses."""
@@ -582,6 +598,7 @@ class RealtimeCallHandler:
         """Handle customer pricing/quote request - send email with quote."""
         try:
             customer_data = universal_field_extractor.to_customer_record()
+            await self._create_or_update_customer(customer_data)
             customer_email = customer_data.get("email")
             customer_name = customer_data.get("name", "Customer")
             customer_phone = customer_data.get("phone_number") or self.caller_number
@@ -640,6 +657,7 @@ Best regards,
         """Schedule a callback for the customer."""
         try:
             customer_data = universal_field_extractor.to_customer_record()
+            await self._create_or_update_customer(customer_data)
             customer_phone = customer_data.get("phone_number") or self.caller_number
             customer_name = customer_data.get("name", "Customer")
             
@@ -670,6 +688,111 @@ Best regards,
             
         except Exception as e:
             print(f"Callback scheduling error: {e}")
+    
+    async def handle_reschedule_request(self):
+        """Handle customer request to reschedule an appointment."""
+        try:
+            customer_data = universal_field_extractor.to_customer_record()
+            await self._create_or_update_customer(customer_data)
+            customer_phone = customer_data.get("phone_number") or self.caller_number
+            
+            service_category = None
+            if self.business.get("service_categories"):
+                service_category = self.business["service_categories"][0]
+            
+            slots = universal_appointment_engine.get_available_slots(
+                business=self.business,
+                service_category=service_category,
+                days_to_check=7
+            )
+            
+            if slots:
+                self.pending_slot = slots[0]
+                self.booking_in_progress = True
+                print(f"Reschedule - New available slot: {self.pending_slot.start}")
+            
+            if customer_phone and customer_phone != "Unknown":
+                dispatcher.send_sms(
+                    customer_phone,
+                    f"We're checking our schedule for a new time for you. - {self.business.get('name', 'Our Team')}"
+                )
+            
+            print("Reschedule flow initiated")
+            
+        except Exception as e:
+            print(f"Reschedule handling error: {e}")
+    
+    async def handle_cancel_request(self):
+        """Handle customer request to cancel an appointment."""
+        try:
+            customer_data = universal_field_extractor.to_customer_record()
+            await self._create_or_update_customer(customer_data)
+            customer_phone = customer_data.get("phone_number") or self.caller_number
+            customer_name = customer_data.get("name", "Customer")
+            
+            if customer_phone and customer_phone != "Unknown":
+                dispatcher.send_sms(
+                    customer_phone,
+                    f"Your cancellation request has been received. A team member will confirm shortly. - {self.business.get('name', 'Our Team')}"
+                )
+            
+            if self.business:
+                business_phone = self.business.get("phone_number")
+                if business_phone:
+                    dispatcher.send_sms(
+                        business_phone,
+                        f"CANCELLATION REQUEST from {customer_name} ({customer_phone}). Please follow up."
+                    )
+            
+            print(f"Cancellation request processed for {customer_phone}")
+            
+        except Exception as e:
+            print(f"Cancel handling error: {e}")
+    
+    async def handle_transfer_to_human(self):
+        """Handle customer request to speak with a human."""
+        try:
+            customer_data = universal_field_extractor.to_customer_record()
+            await self._create_or_update_customer(customer_data)
+            customer_phone = customer_data.get("phone_number") or self.caller_number
+            customer_name = customer_data.get("name", "Customer")
+            issue = universal_field_extractor.extracted_data.get("job_details", "Customer requested human assistance")
+            
+            if self.business:
+                business_phone = self.business.get("phone_number")
+                if business_phone:
+                    dispatcher.send_sms(
+                        business_phone,
+                        f"URGENT: {customer_name} ({customer_phone}) needs to speak with a person. Issue: {issue[:100]}"
+                    )
+            
+            callback_request = OutboundCallRequest(
+                call_type=OutboundCallType.MISSED_CALL_FOLLOWUP,
+                customer_phone=customer_phone,
+                customer_name=customer_name,
+                business_id=self.business_id,
+                business_name=self.business.get("name", "Our Company") if self.business else "Our Company",
+                scheduled_time=datetime.now(),
+                priority=10,
+                context={"reason": "speak_to_human", "issue": issue}
+            )
+            outbound_calling_engine.queue_call(callback_request)
+            
+            print(f"Transfer to human requested - callback queued for {customer_phone}")
+            
+        except Exception as e:
+            print(f"Transfer to human error: {e}")
+    
+    def get_knowledge_base_context(self, query: str) -> str:
+        """Fetch relevant context from knowledge base for the given query."""
+        try:
+            kb_context = get_relevant_context(query, self.business_id)
+            if kb_context:
+                return f"\n\nRELEVANT BUSINESS INFORMATION:\n{kb_context}"
+            return ""
+        except Exception as e:
+            print(f"Knowledge base context error: {e}")
+            return ""
     
     async def _create_or_update_customer(self, customer_data: dict) -> dict:
         """Create or update customer record in database."""
@@ -826,6 +949,7 @@ Best regards,
         """Handle emergency dispatch using universal engines."""
         try:
             customer_data = universal_field_extractor.to_customer_record()
+            await self._create_or_update_customer(customer_data)
             
             db = SessionLocal()
             technicians = db.query(Technician).filter(
