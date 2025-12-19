@@ -1,7 +1,6 @@
-import os
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Cortana AI Voice System",
@@ -17,112 +16,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_routers_loaded = False
-
-def _ensure_routers():
-    """Lazy load routers on first API request."""
-    global _routers_loaded
-    if _routers_loaded:
-        return
-    _routers_loaded = True
-    
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
-    
-    from .database.session import init_db, get_session_local
-    from .routers import twilio_router, api_router, knowledgebase_router, appointments, billing, stream_router, call_actions, business_router
-    from .routers import analytics_router, quotes_router, outbound_router, subscription_router
-    
-    app.include_router(twilio_router.router)
-    app.include_router(api_router.router)
-    app.include_router(knowledgebase_router.router)
-    app.include_router(appointments.router)
-    app.include_router(billing.router)
-    app.include_router(stream_router.router)
-    app.include_router(call_actions.router)
-    app.include_router(business_router.router)
-    app.include_router(analytics_router.router)
-    app.include_router(quotes_router.router)
-    app.include_router(outbound_router.router)
-    app.include_router(subscription_router.router)
-    
-    @app.get("/api/info")
-    async def get_info():
-        return {
-            "name": "Cortana AI Voice System",
-            "version": "1.0.0",
-            "company": "Doxen Strategy Group",
-            "status": "operational"
-        }
-
-    @app.get("/api/integrations/status")
-    async def get_integration_status():
-        return {
-            "database": bool(os.environ.get("DATABASE_URL")),
-            "openai": bool(os.environ.get("OPENAI_API_KEY")),
-            "twilio": bool(os.environ.get("TWILIO_ACCOUNT_SID")),
-            "pinecone": bool(os.environ.get("PINECONE_API_KEY")),
-            "google_calendar": True,
-            "stripe": bool(os.environ.get("STRIPE_SECRET_KEY")),
-            "sendgrid": bool(os.environ.get("SENDGRID_API_KEY"))
-        }
-    
-    FRONTEND_DIR = "frontend/out"
-    
-    @app.get("/app")
-    async def serve_app():
-        index_path = os.path.join(FRONTEND_DIR, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path, media_type="text/html")
-        return {"error": "Frontend not built"}
-    
-    if os.path.exists(FRONTEND_DIR):
-        app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="next_static")
-    
-    @app.get("/{path:path}")
-    async def serve_frontend(path: str):
-        if path.startswith("api/") or path.startswith("twilio/") or path.startswith("billing/"):
-            return {"error": "Not found"}
-        
-        file_path = os.path.join(FRONTEND_DIR, path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        
-        html_path = os.path.join(FRONTEND_DIR, path, "index.html")
-        if os.path.exists(html_path):
-            return FileResponse(html_path, media_type="text/html")
-        
-        index_path = os.path.join(FRONTEND_DIR, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path, media_type="text/html")
-        
-        return {"error": "Frontend not built"}
-    
-    try:
-        init_db()
-        print("Database initialized")
-    except Exception as e:
-        print(f"Database initialization error: {e}")
-    
-    print("All routers loaded successfully")
-
 @app.get("/")
-async def root():
-    """Root health check - responds immediately without loading anything."""
-    return JSONResponse({"status": "ok", "message": "Cortana AI Voice System", "version": "1.0.0"})
+async def health_root():
+    """Instant health check - zero imports, zero dependencies."""
+    return JSONResponse({"status": "ok"}, status_code=200)
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint - responds immediately."""
-    return JSONResponse({"status": "healthy"})
+    """Health check endpoint - instant response."""
+    return JSONResponse({"status": "ok"}, status_code=200)
 
-@app.get("/ready")
-async def ready_check():
-    """Readiness check - triggers router loading and confirms app is fully ready."""
-    _ensure_routers()
-    return JSONResponse({"status": "ready", "routers_loaded": True})
+@app.middleware("http")
+async def load_routers_middleware(request: Request, call_next):
+    """Load routers only on non-health-check requests."""
+    if request.url.path not in ["/", "/health"]:
+        from .router_loader import load_routers
+        load_routers(app)
+    return await call_next(request)
 
 @app.on_event("startup")
 async def startup_event():
-    """Minimal startup - just log that we're ready for health checks."""
+    """Minimal startup - just log ready status."""
     print("Application started - ready for health checks")
