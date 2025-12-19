@@ -26,6 +26,57 @@ async def test_voice():
 </Response>"""
     return Response(content=twiml, media_type="application/xml")
 
+@router.post("/stream-test")
+async def stream_test_twiml(request: Request):
+    """Test endpoint with stream - just plays a message, no OpenAI."""
+    host = request.headers.get("host", "doxen-ai-voice--doxenstrategy.replit.app")
+    print(f"[STREAM-TEST] Incoming call, host: {host}")
+    
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">Welcome! Connecting you to the stream now.</Say>
+    <Connect>
+        <Stream url="wss://{host}/twilio/realtime-test" />
+    </Connect>
+    <Say voice="Polly.Joanna">The stream has ended. Thank you for calling.</Say>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
+@router.websocket("/realtime-test")
+async def realtime_test(ws: WebSocket):
+    """Simple WebSocket that just acknowledges connection and plays a greeting."""
+    print("[REALTIME-TEST] WebSocket connection attempt")
+    await ws.accept()
+    print("[REALTIME-TEST] WebSocket accepted")
+    
+    import base64
+    
+    try:
+        while True:
+            data = await ws.receive_text()
+            msg = json.loads(data)
+            
+            if msg.get("event") == "start":
+                stream_sid = msg["start"]["streamSid"]
+                print(f"[REALTIME-TEST] Stream started: {stream_sid}")
+                
+                # Send a simple mark to keep connection alive
+                mark = {"event": "mark", "streamSid": stream_sid, "mark": {"name": "connected"}}
+                await ws.send_text(json.dumps(mark))
+                
+            elif msg.get("event") == "media":
+                # Just echo that we received audio (don't send anything back)
+                pass
+                
+            elif msg.get("event") == "stop":
+                print("[REALTIME-TEST] Stream stopped")
+                break
+                
+    except Exception as e:
+        print(f"[REALTIME-TEST] Error: {e}")
+    finally:
+        print("[REALTIME-TEST] Handler finished")
+
 def generate_twiml_response(message: str, gather: bool = True) -> str:
     if gather:
         return f"""<?xml version="1.0" encoding="UTF-8"?>
