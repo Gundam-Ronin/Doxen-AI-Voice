@@ -3,6 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 import json
+import asyncio
 from datetime import datetime
 
 from ..database.session import get_db
@@ -32,11 +33,13 @@ async def stream_test_twiml(request: Request):
     host = request.headers.get("host", "doxen-ai-voice--doxenstrategy.replit.app")
     print(f"[STREAM-TEST] Incoming call, host: {host}")
     
-    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+    # Use hardcoded URL to avoid any hostname issues
+    twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">Welcome! Connecting you to the stream now.</Say>
+    <Pause length="1"/>
     <Connect>
-        <Stream url="wss://{host}/twilio/realtime-test" />
+        <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime-test" />
     </Connect>
     <Say voice="Polly.Joanna">The stream has ended. Thank you for calling.</Say>
 </Response>"""
@@ -46,8 +49,9 @@ async def stream_test_twiml(request: Request):
 async def realtime_test(ws: WebSocket):
     """Simple WebSocket that just acknowledges connection then closes after 3 seconds."""
     print("[REALTIME-TEST] WebSocket connection attempt")
-    await ws.accept()
-    print("[REALTIME-TEST] WebSocket accepted")
+    # CRITICAL: Twilio Media Streams requires this subprotocol
+    await ws.accept(subprotocol="audio.twilio.com")
+    print("[REALTIME-TEST] WebSocket accepted with audio.twilio.com subprotocol")
     
     stream_sid = None
     

@@ -152,8 +152,9 @@ class RealtimeCallHandler:
         print(f"[REALTIME] WebSocket handler started for business_id: {self.business_id}")
         
         try:
-            await self.websocket.accept()
-            print("[REALTIME] Twilio WebSocket accepted")
+            # CRITICAL: Twilio Media Streams requires this subprotocol for bidirectional audio
+            await self.websocket.accept(subprotocol="audio.twilio.com")
+            print("[REALTIME] Twilio WebSocket accepted with audio.twilio.com subprotocol")
         except Exception as e:
             print(f"[REALTIME] Failed to accept WebSocket: {e}")
             return
