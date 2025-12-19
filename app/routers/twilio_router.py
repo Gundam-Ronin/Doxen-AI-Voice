@@ -49,9 +49,18 @@ async def stream_test_twiml(request: Request):
 async def realtime_test(ws: WebSocket):
     """Simple WebSocket that just acknowledges connection then closes after 3 seconds."""
     print("[REALTIME-TEST] WebSocket connection attempt")
-    # Twilio Media Streams does NOT request a subprotocol - accept without one
-    await ws.accept()
-    print("[REALTIME-TEST] WebSocket accepted (no subprotocol)")
+    print(f"[REALTIME-TEST] Headers: {dict(ws.headers)}")
+    
+    # Check if Twilio requested a subprotocol
+    requested_protocol = ws.headers.get("sec-websocket-protocol", "")
+    print(f"[REALTIME-TEST] Requested subprotocol: '{requested_protocol}'")
+    
+    if "audio.twilio.com" in requested_protocol:
+        await ws.accept(subprotocol="audio.twilio.com")
+        print("[REALTIME-TEST] WebSocket accepted WITH subprotocol")
+    else:
+        await ws.accept()
+        print("[REALTIME-TEST] WebSocket accepted WITHOUT subprotocol")
     
     stream_sid = None
     
@@ -333,9 +342,19 @@ async def stream_twiml(request: Request, db: Session = Depends(get_db)):
 async def realtime_audio(ws: WebSocket):
     try:
         print("[REALTIME WS] WebSocket connection attempt")
-        # Twilio Media Streams does NOT request a subprotocol - accept without one
-        await ws.accept()
-        print("[REALTIME WS] WebSocket accepted (no subprotocol - Twilio requirement)")
+        print(f"[REALTIME WS] Headers: {dict(ws.headers)}")
+        
+        # Check if Twilio requested a subprotocol
+        requested_protocol = ws.headers.get("sec-websocket-protocol", "")
+        print(f"[REALTIME WS] Requested subprotocol: '{requested_protocol}'")
+        
+        if "audio.twilio.com" in requested_protocol:
+            await ws.accept(subprotocol="audio.twilio.com")
+            print("[REALTIME WS] WebSocket accepted WITH subprotocol audio.twilio.com")
+        else:
+            await ws.accept()
+            print("[REALTIME WS] WebSocket accepted WITHOUT subprotocol")
+        
         await handle_realtime_voice(ws, already_accepted=True)
         print("[REALTIME WS] Handler completed normally")
     except Exception as e:
