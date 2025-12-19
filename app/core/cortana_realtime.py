@@ -147,17 +147,20 @@ class RealtimeCallHandler:
             }
             self.extraction_schema = ExtractionSchema()
     
-    async def handle(self):
+    async def handle(self, already_accepted: bool = False):
         """Main entry point for handling the realtime call."""
         print(f"[REALTIME] WebSocket handler started for business_id: {self.business_id}")
         
-        try:
-            # CRITICAL: Twilio Media Streams requires this subprotocol for bidirectional audio
-            await self.websocket.accept(subprotocol="audio.twilio.com")
-            print("[REALTIME] Twilio WebSocket accepted with audio.twilio.com subprotocol")
-        except Exception as e:
-            print(f"[REALTIME] Failed to accept WebSocket: {e}")
-            return
+        if not already_accepted:
+            try:
+                # CRITICAL: Twilio Media Streams requires this subprotocol for bidirectional audio
+                await self.websocket.accept(subprotocol="audio.twilio.com")
+                print("[REALTIME] Twilio WebSocket accepted with audio.twilio.com subprotocol")
+            except Exception as e:
+                print(f"[REALTIME] Failed to accept WebSocket: {e}")
+                return
+        else:
+            print("[REALTIME] WebSocket already accepted, skipping accept step")
         
         self._load_business()
         print(f"[REALTIME] Business loaded: {self.business.get('name') if self.business else 'None'}")
@@ -1067,7 +1070,7 @@ Best regards,
         print("Realtime session ended")
 
 
-async def handle_realtime_voice(websocket: WebSocket, business_id: int = None):
+async def handle_realtime_voice(websocket: WebSocket, business_id: int = None, already_accepted: bool = False):
     """Entry point for realtime voice handling with optional business_id."""
     handler = RealtimeCallHandler(websocket, business_id)
-    await handler.handle()
+    await handler.handle(already_accepted=already_accepted)

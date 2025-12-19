@@ -333,7 +333,10 @@ async def stream_twiml(request: Request, db: Session = Depends(get_db)):
 async def realtime_audio(ws: WebSocket):
     try:
         print("[REALTIME WS] WebSocket connection attempt")
-        await handle_realtime_voice(ws)
+        # CRITICAL: Accept with Twilio subprotocol FIRST before any processing
+        await ws.accept(subprotocol="audio.twilio.com")
+        print("[REALTIME WS] WebSocket accepted with audio.twilio.com subprotocol")
+        await handle_realtime_voice(ws, already_accepted=True)
         print("[REALTIME WS] Handler completed normally")
     except Exception as e:
         print(f"[REALTIME WS] Error in handler: {type(e).__name__}: {e}")
