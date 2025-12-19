@@ -295,8 +295,8 @@ async def stream_twiml(request: Request, db: Session = Depends(get_db)):
         except Exception as db_err:
             print(f"[TWILIO STREAM] Database error: {db_err}")
         
-        host = request.headers.get("host", "doxen-ai-voice--doxenstrategy.replit.app")
-        ws_url = f"wss://{host}/twilio/realtime"
+        # Use hardcoded production URL to avoid any host header issues
+        ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
         
         print(f"[TWILIO STREAM] Call from {from_number}, CallSID: {call_sid}, Business: {business_id}")
         
