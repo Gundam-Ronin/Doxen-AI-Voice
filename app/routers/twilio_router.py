@@ -273,4 +273,15 @@ async def stream_twiml(request: Request, db: Session = Depends(get_db)):
 
 @router.websocket("/realtime")
 async def realtime_audio(ws: WebSocket):
-    await handle_realtime_voice(ws)
+    try:
+        print("[REALTIME WS] WebSocket connection attempt")
+        await handle_realtime_voice(ws)
+        print("[REALTIME WS] Handler completed normally")
+    except Exception as e:
+        print(f"[REALTIME WS] Error in handler: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await ws.close(code=1011, reason="Internal server error")
+        except:
+            pass
