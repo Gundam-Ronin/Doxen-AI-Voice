@@ -209,14 +209,17 @@ class RealtimeCallHandler:
                 )
             except asyncio.TimeoutError:
                 print("[REALTIME] OpenAI connection timed out!")
-                return
+                await self.websocket.close(code=1011, reason="AI connection timeout")
+                raise Exception("OpenAI connection timeout")
             except Exception as conn_err:
                 print(f"[REALTIME] OpenAI connection failed: {type(conn_err).__name__}: {conn_err}")
-                return
+                await self.websocket.close(code=1011, reason="AI connection failed")
+                raise Exception(f"OpenAI connection failed: {conn_err}")
             
             if not self.openai_ws:
                 print("[REALTIME] Failed to connect to OpenAI Realtime")
-                return
+                await self.websocket.close(code=1011, reason="AI service unavailable")
+                raise Exception("OpenAI connection failed")
             
             print("[REALTIME] OpenAI Realtime connected successfully")
             

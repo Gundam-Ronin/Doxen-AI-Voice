@@ -245,7 +245,7 @@ async def stream_twiml(request: Request, db: Session = Depends(get_db)):
         
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>Please hold while we connect you to our AI assistant.</Say>
+    <Say voice="Polly.Joanna">Thank you for calling. Please hold while I connect you to our AI assistant.</Say>
     <Connect>
         <Stream url="{ws_url}">
             <Parameter name="from" value="{from_number}" />
@@ -253,6 +253,7 @@ async def stream_twiml(request: Request, db: Session = Depends(get_db)):
             <Parameter name="call_sid" value="{call_sid}" />
         </Stream>
     </Connect>
+    <Say voice="Polly.Joanna">I apologize, but we're experiencing technical difficulties. Please try calling back later or leave a message.</Say>
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
     except Exception as e:
