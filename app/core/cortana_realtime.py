@@ -258,8 +258,17 @@ class RealtimeCallHandler:
             await self.openai_ws.send(json.dumps(session_update))
             print(f"[REALTIME] Session configured for business: {self.business.get('name') if self.business else 'Unknown'}")
             
-            # Wait for session to be updated before sending greeting
-            await asyncio.sleep(0.5)
+            # Wait for stream_sid to be set by receive_from_twilio before sending greeting
+            # This prevents the race condition where audio is sent before Twilio is ready
+            wait_count = 0
+            while not self.stream_sid and wait_count < 50:
+                await asyncio.sleep(0.1)
+                wait_count += 1
+            
+            if not self.stream_sid:
+                print("[REALTIME] WARNING: stream_sid not received after 5 seconds, proceeding anyway")
+            else:
+                print(f"[REALTIME] stream_sid received: {self.stream_sid}")
             
             # Trigger OpenAI to speak first with a greeting
             business_name = self.business.get('name', 'our company') if self.business else 'our company'
