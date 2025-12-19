@@ -153,9 +153,9 @@ class RealtimeCallHandler:
         
         if not already_accepted:
             try:
-                # CRITICAL: Twilio Media Streams requires this subprotocol for bidirectional audio
-                await self.websocket.accept(subprotocol="audio.twilio.com")
-                print("[REALTIME] Twilio WebSocket accepted with audio.twilio.com subprotocol")
+                # Twilio Media Streams does NOT request a subprotocol - accept without one
+                await self.websocket.accept()
+                print("[REALTIME] Twilio WebSocket accepted (no subprotocol)")
             except Exception as e:
                 print(f"[REALTIME] Failed to accept WebSocket: {e}")
                 return

@@ -49,9 +49,9 @@ async def stream_test_twiml(request: Request):
 async def realtime_test(ws: WebSocket):
     """Simple WebSocket that just acknowledges connection then closes after 3 seconds."""
     print("[REALTIME-TEST] WebSocket connection attempt")
-    # CRITICAL: Twilio Media Streams requires this subprotocol
-    await ws.accept(subprotocol="audio.twilio.com")
-    print("[REALTIME-TEST] WebSocket accepted with audio.twilio.com subprotocol")
+    # Twilio Media Streams does NOT request a subprotocol - accept without one
+    await ws.accept()
+    print("[REALTIME-TEST] WebSocket accepted (no subprotocol)")
     
     stream_sid = None
     
@@ -333,9 +333,9 @@ async def stream_twiml(request: Request, db: Session = Depends(get_db)):
 async def realtime_audio(ws: WebSocket):
     try:
         print("[REALTIME WS] WebSocket connection attempt")
-        # CRITICAL: Accept with Twilio subprotocol FIRST before any processing
-        await ws.accept(subprotocol="audio.twilio.com")
-        print("[REALTIME WS] WebSocket accepted with audio.twilio.com subprotocol")
+        # Twilio Media Streams does NOT request a subprotocol - accept without one
+        await ws.accept()
+        print("[REALTIME WS] WebSocket accepted (no subprotocol - Twilio requirement)")
         await handle_realtime_voice(ws, already_accepted=True)
         print("[REALTIME WS] Handler completed normally")
     except Exception as e:
