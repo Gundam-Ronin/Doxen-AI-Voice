@@ -30,11 +30,13 @@ async def health_check():
 
 routers_loaded = False
 
-def load_routers():
-    """Load all routers - called after health check can respond."""
+async def load_routers_async():
+    """Load all routers in background - does not block startup."""
     global routers_loaded
     if routers_loaded:
         return
+    
+    await asyncio.sleep(0.1)
     
     from fastapi.staticfiles import StaticFiles
     from fastapi.responses import FileResponse
@@ -108,6 +110,11 @@ def load_routers():
         
         return {"error": "Frontend not built"}
     
+    routers_loaded = True
+    print("All routers loaded successfully")
+    
+    await asyncio.sleep(0)
+    
     try:
         init_db()
         print("Database initialized")
@@ -123,12 +130,8 @@ def load_routers():
                 db.close()
     except Exception as e:
         print(f"Database initialization error: {e}")
-    
-    routers_loaded = True
-    print("All routers loaded successfully")
 
 @app.on_event("startup")
 async def startup_event():
-    """Load routers immediately but non-blocking."""
-    loop = asyncio.get_event_loop()
-    loop.call_soon(load_routers)
+    """Start router loading in background - returns immediately."""
+    asyncio.create_task(load_routers_async())
