@@ -1,8 +1,9 @@
 import os
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .database.session import init_db, SessionLocal
 from .routers import twilio_router, api_router, knowledgebase_router, appointments, billing, stream_router, call_actions, business_router
@@ -22,6 +23,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    """Root health check - responds immediately."""
+    return JSONResponse({"status": "ok", "message": "Cortana AI Voice System", "version": "1.0.0"})
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment monitoring."""
+    return JSONResponse({"status": "healthy"})
+
 app.include_router(twilio_router.router)
 app.include_router(api_router.router)
 app.include_router(knowledgebase_router.router)
@@ -35,24 +46,30 @@ app.include_router(quotes_router.router)
 app.include_router(outbound_router.router)
 app.include_router(subscription_router.router)
 
+db_initialized = False
+
+async def init_database_background():
+    """Initialize database in background without blocking startup."""
+    global db_initialized
+    try:
+        init_db()
+        print("Database initialized")
+        db_initialized = True
+        
+        if SessionLocal:
+            from .database.models import Business
+            db = SessionLocal()
+            try:
+                if not db.query(Business).first():
+                    print("No businesses found. Run 'python seed_data.py' to seed demo data.")
+            finally:
+                db.close()
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+
 @app.on_event("startup")
 async def startup_event():
-    init_db()
-    print("Database initialized")
-    
-    if SessionLocal:
-        from .database.models import Business
-        db = SessionLocal()
-        try:
-            if not db.query(Business).first():
-                print("No businesses found. Run 'python seed_data.py' to seed demo data.")
-        finally:
-            db.close()
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for deployment monitoring."""
-    return {"status": "healthy"}
+    asyncio.create_task(init_database_background())
 
 @app.get("/api/info")
 async def get_info():
@@ -76,11 +93,6 @@ async def get_integration_status():
     }
 
 FRONTEND_DIR = "frontend/out"
-
-@app.get("/")
-async def serve_index():
-    """Root endpoint - serves frontend or returns API status."""
-    return {"status": "ok", "message": "Cortana AI Voice System", "version": "1.0.0"}
 
 @app.get("/app")
 async def serve_app():
