@@ -44,33 +44,26 @@ async def stream_test_twiml(request: Request):
 
 @router.websocket("/realtime-test")
 async def realtime_test(ws: WebSocket):
-    """Simple WebSocket that just acknowledges connection and plays a greeting."""
+    """Simple WebSocket that just acknowledges connection then closes after 3 seconds."""
     print("[REALTIME-TEST] WebSocket connection attempt")
     await ws.accept()
     print("[REALTIME-TEST] WebSocket accepted")
     
-    import base64
+    stream_sid = None
     
     try:
-        while True:
-            data = await ws.receive_text()
-            msg = json.loads(data)
-            
-            if msg.get("event") == "start":
-                stream_sid = msg["start"]["streamSid"]
-                print(f"[REALTIME-TEST] Stream started: {stream_sid}")
-                
-                # Send a simple mark to keep connection alive
-                mark = {"event": "mark", "streamSid": stream_sid, "mark": {"name": "connected"}}
-                await ws.send_text(json.dumps(mark))
-                
-            elif msg.get("event") == "media":
-                # Just echo that we received audio (don't send anything back)
-                pass
-                
-            elif msg.get("event") == "stop":
-                print("[REALTIME-TEST] Stream stopped")
-                break
+        # Wait for start event
+        data = await ws.receive_text()
+        msg = json.loads(data)
+        
+        if msg.get("event") == "start":
+            stream_sid = msg["start"]["streamSid"]
+            print(f"[REALTIME-TEST] Stream started: {stream_sid}")
+        
+        # Wait 3 seconds then close - this should trigger the final <Say>
+        await asyncio.sleep(3)
+        print("[REALTIME-TEST] Closing connection after 3 seconds")
+        await ws.close()
                 
     except Exception as e:
         print(f"[REALTIME-TEST] Error: {e}")
