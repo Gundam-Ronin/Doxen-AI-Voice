@@ -1,5 +1,4 @@
 import os
-import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -18,25 +17,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def root():
-    """Root health check - responds immediately."""
-    return JSONResponse({"status": "ok", "message": "Cortana AI Voice System", "version": "1.0.0"})
+_routers_loaded = False
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for deployment monitoring."""
-    return JSONResponse({"status": "healthy"})
-
-routers_loaded = False
-
-async def load_routers_async():
-    """Load all routers in background - does not block startup."""
-    global routers_loaded
-    if routers_loaded:
+def _ensure_routers():
+    """Lazy load routers on first API request."""
+    global _routers_loaded
+    if _routers_loaded:
         return
-    
-    await asyncio.sleep(0.1)
+    _routers_loaded = True
     
     from fastapi.staticfiles import StaticFiles
     from fastapi.responses import FileResponse
@@ -110,28 +98,31 @@ async def load_routers_async():
         
         return {"error": "Frontend not built"}
     
-    routers_loaded = True
-    print("All routers loaded successfully")
-    
-    await asyncio.sleep(0)
-    
     try:
         init_db()
         print("Database initialized")
-        
-        session_local = get_session_local()
-        if session_local:
-            from .database.models import Business
-            db = session_local()
-            try:
-                if not db.query(Business).first():
-                    print("No businesses found. Run 'python seed_data.py' to seed demo data.")
-            finally:
-                db.close()
     except Exception as e:
         print(f"Database initialization error: {e}")
+    
+    print("All routers loaded successfully")
+
+@app.get("/")
+async def root():
+    """Root health check - responds immediately without loading anything."""
+    return JSONResponse({"status": "ok", "message": "Cortana AI Voice System", "version": "1.0.0"})
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint - responds immediately."""
+    return JSONResponse({"status": "healthy"})
+
+@app.get("/ready")
+async def ready_check():
+    """Readiness check - triggers router loading and confirms app is fully ready."""
+    _ensure_routers()
+    return JSONResponse({"status": "ready", "routers_loaded": True})
 
 @app.on_event("startup")
 async def startup_event():
-    """Start router loading in background - returns immediately."""
-    asyncio.create_task(load_routers_async())
+    """Minimal startup - just log that we're ready for health checks."""
+    print("Application started - ready for health checks")
