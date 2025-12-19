@@ -11,7 +11,11 @@ def get_engine():
     """Lazy engine creation - only connects when first needed."""
     global _engine
     if _engine is None and DATABASE_URL:
-        _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        try:
+            _engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args={"connect_timeout": 5})
+        except Exception as e:
+            print(f"Database engine creation failed: {e}")
+            return None
     return _engine
 
 def get_session_local():
@@ -37,11 +41,20 @@ class _LazySessionLocal:
 SessionLocal = _LazySessionLocal()
 
 def init_db():
-    """Initialize database tables."""
-    engine = get_engine()
-    if engine:
-        from .models import Base
-        Base.metadata.create_all(bind=engine)
+    """Initialize database tables - non-blocking, logs errors instead of raising."""
+    if not DATABASE_URL:
+        print("DATABASE_URL not set - skipping database initialization")
+        return False
+    
+    try:
+        engine = get_engine()
+        if engine:
+            from .models import Base
+            Base.metadata.create_all(bind=engine)
+            return True
+    except Exception as e:
+        print(f"Database initialization error (non-fatal): {e}")
+    return False
 
 def get_db():
     """Database session dependency for FastAPI."""
