@@ -17,6 +17,15 @@ from ..core.cortana_realtime import handle_realtime_voice
 
 router = APIRouter(prefix="/twilio", tags=["twilio"])
 
+@router.post("/test")
+async def test_voice():
+    """Simple test endpoint - no WebSocket, just TTS."""
+    twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">Hello! This is a test. Your connection to the Cortana AI Voice System is working correctly. Goodbye!</Say>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
 def generate_twiml_response(message: str, gather: bool = True) -> str:
     if gather:
         return f"""<?xml version="1.0" encoding="UTF-8"?>
