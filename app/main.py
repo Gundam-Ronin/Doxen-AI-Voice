@@ -28,23 +28,6 @@ async def health():
     """Health check endpoint."""
     return JSONResponse({"status": "healthy"}, status_code=200)
 
-from .database.session import init_db
-from .routers import twilio_router, api_router, knowledgebase_router, appointments, billing, stream_router, call_actions, business_router
-from .routers import analytics_router, quotes_router, outbound_router, subscription_router
-
-app.include_router(twilio_router.router)
-app.include_router(api_router.router)
-app.include_router(knowledgebase_router.router)
-app.include_router(appointments.router)
-app.include_router(billing.router)
-app.include_router(stream_router.router)
-app.include_router(call_actions.router)
-app.include_router(business_router.router)
-app.include_router(analytics_router.router)
-app.include_router(quotes_router.router)
-app.include_router(outbound_router.router)
-app.include_router(subscription_router.router)
-
 @app.get("/api/info")
 async def get_info():
     return {
@@ -65,6 +48,40 @@ async def get_integration_status():
         "stripe": bool(os.environ.get("STRIPE_SECRET_KEY")),
         "sendgrid": bool(os.environ.get("SENDGRID_API_KEY"))
     }
+
+try:
+    from .database.session import init_db
+    from .routers import twilio_router
+    from .routers import api_router
+    from .routers import knowledgebase_router
+    from .routers import appointments
+    from .routers import billing
+    from .routers import stream_router
+    from .routers import call_actions
+    from .routers import business_router
+    from .routers import analytics_router
+    from .routers import quotes_router
+    from .routers import outbound_router
+    from .routers import subscription_router
+
+    app.include_router(twilio_router.router)
+    app.include_router(api_router.router)
+    app.include_router(knowledgebase_router.router)
+    app.include_router(appointments.router)
+    app.include_router(billing.router)
+    app.include_router(stream_router.router)
+    app.include_router(call_actions.router)
+    app.include_router(business_router.router)
+    app.include_router(analytics_router.router)
+    app.include_router(quotes_router.router)
+    app.include_router(outbound_router.router)
+    app.include_router(subscription_router.router)
+    
+    ROUTERS_LOADED = True
+except Exception as e:
+    print(f"Router import error (non-fatal): {e}")
+    init_db = None
+    ROUTERS_LOADED = False
 
 FRONTEND_DIR = "frontend/out"
 
@@ -103,8 +120,16 @@ async def serve_frontend(path: str):
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup - non-blocking."""
-    if init_db():
-        print("Database initialized successfully")
+    if init_db:
+        try:
+            if init_db():
+                print("Database initialized successfully")
+            else:
+                print("Database initialization skipped or failed - app continues")
+        except Exception as e:
+            print(f"Database init error (non-fatal): {e}")
+    
+    if ROUTERS_LOADED:
+        print("Application ready - all routes loaded")
     else:
-        print("Database initialization skipped or failed - app continues")
-    print("Application ready - all routes loaded")
+        print("Application ready - running in minimal mode (routers failed to load)")
