@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request
+import asyncio
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,24 +18,26 @@ app.add_middleware(
 )
 
 @app.get("/")
-async def health_root():
-    """Instant health check - zero imports, zero dependencies."""
+async def root():
+    """Instant health check - responds immediately."""
     return JSONResponse({"status": "ok"}, status_code=200)
 
 @app.get("/health")
-async def health_check():
+async def health():
     """Health check endpoint - instant response."""
-    return JSONResponse({"status": "ok"}, status_code=200)
+    return JSONResponse({"status": "healthy"}, status_code=200)
 
-@app.middleware("http")
-async def load_routers_middleware(request: Request, call_next):
-    """Load routers only on non-health-check requests."""
-    if request.url.path not in ["/", "/health"]:
-        from .router_loader import load_routers
-        load_routers(app)
-    return await call_next(request)
+async def load_everything_async():
+    """Load routers after health check has time to respond."""
+    await asyncio.sleep(0.5)
+    
+    from .router_loader import load_routers
+    load_routers(app)
+    
+    print("Routers + DB fully loaded and ready for Twilio.")
 
 @app.on_event("startup")
 async def startup_event():
-    """Minimal startup - just log ready status."""
+    """Start router loading in background after health check window."""
+    asyncio.create_task(load_everything_async())
     print("Application started - ready for health checks")
