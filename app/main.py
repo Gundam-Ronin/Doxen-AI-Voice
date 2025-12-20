@@ -18,14 +18,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+FRONTEND_DIR = "frontend/out"
+
 @app.get("/")
 async def root():
-    """Health check - responds immediately."""
-    return JSONResponse({"status": "ok"}, status_code=200)
+    """Serve frontend homepage."""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path, media_type="text/html")
+    return JSONResponse({"status": "ok", "message": "Frontend not built"}, status_code=200)
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint for deployments."""
     return JSONResponse({"status": "healthy"}, status_code=200)
 
 @app.get("/api/info")
@@ -82,8 +87,6 @@ except Exception as e:
     print(f"Router import error (non-fatal): {e}")
     init_db = None
     ROUTERS_LOADED = False
-
-FRONTEND_DIR = "frontend/out"
 
 @app.get("/app")
 async def serve_app():
