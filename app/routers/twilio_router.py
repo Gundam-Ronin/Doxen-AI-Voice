@@ -6,7 +6,7 @@ import json
 import asyncio
 from datetime import datetime
 
-from ..database.session import get_db
+from ..database.session import get_db, get_db_optional
 from ..database.models import Business, CallLog, ActiveCall
 from ..core.call_manager import call_manager
 from ..core.ai_engine import generate_ai_response, detect_language, detect_intent, analyze_sentiment
@@ -99,7 +99,7 @@ def generate_twiml_response(message: str, gather: bool = True) -> str:
 </Response>"""
 
 @router.post("/voice")
-async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
+async def handle_incoming_call(request: Request, db: Session = Depends(get_db_optional)):
     """Main voice webhook - returns TwiML to connect to Realtime AI stream."""
     try:
         form_data = await request.form()
@@ -112,34 +112,37 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
         business_id = 1
         business_name = "our company"
         
-        try:
-            business = db.query(Business).filter(Business.phone_number == to_number).first()
-            if not business:
-                business = db.query(Business).first()
-            if business:
-                business_id = business.id
-                business_name = business.name
-        except Exception as db_err:
-            print(f"[TWILIO VOICE] Database query error: {db_err}")
+        if db:
+            try:
+                business = db.query(Business).filter(Business.phone_number == to_number).first()
+                if not business:
+                    business = db.query(Business).first()
+                if business:
+                    business_id = business.id
+                    business_name = business.name
+            except Exception as db_err:
+                print(f"[TWILIO VOICE] Database query error: {db_err}")
         
         # Track the call (non-blocking)
         try:
             call_manager.start_call(call_sid, business_id, from_number)
             
-            active_call = ActiveCall(
-                call_sid=call_sid,
-                business_id=business_id,
-                caller_number=from_number,
-                status="in_progress"
-            )
-            db.add(active_call)
-            db.commit()
+            if db:
+                active_call = ActiveCall(
+                    call_sid=call_sid,
+                    business_id=business_id,
+                    caller_number=from_number,
+                    status="in_progress"
+                )
+                db.add(active_call)
+                db.commit()
         except Exception as e:
             print(f"[TWILIO VOICE] Error tracking call: {e}")
-            try:
-                db.rollback()
-            except:
-                pass
+            if db:
+                try:
+                    db.rollback()
+                except:
+                    pass
         
         # Use hardcoded production URL for the WebSocket stream
         ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
@@ -322,7 +325,7 @@ async def handle_sms(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/stream")
-async def stream_twiml(request: Request, db: Session = Depends(get_db)):
+async def stream_twiml(request: Request, db: Session = Depends(get_db_optional)):
     try:
         form_data = await request.form()
         from_number = form_data.get("From", "Unknown")

@@ -66,3 +66,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_db_optional():
+    """Optional database session - returns None if DB not available."""
+    session_local = get_session_local()
+    if session_local is None:
+        yield None
+        return
+    db = session_local()
+    try:
+        yield db
+    finally:
+        if db:
+            db.close()
