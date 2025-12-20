@@ -101,41 +101,51 @@ def generate_twiml_response(message: str, gather: bool = True) -> str:
 @router.post("/voice")
 async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     """Main voice webhook - returns TwiML to connect to Realtime AI stream."""
-    form_data = await request.form()
-    call_sid = form_data.get("CallSid", "")
-    from_number = form_data.get("From", "")
-    to_number = form_data.get("To", "")
-    
-    print(f"[TWILIO VOICE] Incoming call from {from_number}, CallSID: {call_sid}")
-    
-    business = db.query(Business).filter(Business.phone_number == to_number).first()
-    
-    if not business:
-        business = db.query(Business).first()
-    
-    business_id = business.id if business else 1
-    business_name = business.name if business else "our company"
-    
-    # Track the call
     try:
-        call_manager.start_call(call_sid, business_id, from_number)
+        form_data = await request.form()
+        call_sid = form_data.get("CallSid", "unknown")
+        from_number = form_data.get("From", "Unknown")
+        to_number = form_data.get("To", "")
         
-        active_call = ActiveCall(
-            call_sid=call_sid,
-            business_id=business_id,
-            caller_number=from_number,
-            status="in_progress"
-        )
-        db.add(active_call)
-        db.commit()
-    except Exception as e:
-        print(f"[TWILIO VOICE] Error tracking call: {e}")
-    
-    # Use hardcoded production URL for the WebSocket stream
-    ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
-    
-    # Return TwiML that connects to the Realtime AI stream
-    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+        print(f"[TWILIO VOICE] Incoming call from {from_number}, CallSID: {call_sid}")
+        
+        business_id = 1
+        business_name = "our company"
+        
+        try:
+            business = db.query(Business).filter(Business.phone_number == to_number).first()
+            if not business:
+                business = db.query(Business).first()
+            if business:
+                business_id = business.id
+                business_name = business.name
+        except Exception as db_err:
+            print(f"[TWILIO VOICE] Database query error: {db_err}")
+        
+        # Track the call (non-blocking)
+        try:
+            call_manager.start_call(call_sid, business_id, from_number)
+            
+            active_call = ActiveCall(
+                call_sid=call_sid,
+                business_id=business_id,
+                caller_number=from_number,
+                status="in_progress"
+            )
+            db.add(active_call)
+            db.commit()
+        except Exception as e:
+            print(f"[TWILIO VOICE] Error tracking call: {e}")
+            try:
+                db.rollback()
+            except:
+                pass
+        
+        # Use hardcoded production URL for the WebSocket stream
+        ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
+        
+        # Return TwiML that connects to the Realtime AI stream
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">Thank you for calling {business_name}. Please hold while I connect you to our AI assistant.</Say>
     <Connect>
@@ -147,9 +157,26 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     </Connect>
     <Say voice="Polly.Joanna">I apologize, but we're experiencing technical difficulties. Please try calling back later.</Say>
 </Response>"""
-    
-    print(f"[TWILIO VOICE] Returning TwiML with stream URL: {ws_url}")
-    return Response(content=twiml, media_type="application/xml")
+        
+        print(f"[TWILIO VOICE] Returning TwiML with stream URL: {ws_url}")
+        return Response(content=twiml, media_type="application/xml")
+    except Exception as e:
+        print(f"[TWILIO VOICE] Critical error: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return basic TwiML even on error
+        fallback_twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">Thank you for calling. Please hold while I connect you.</Say>
+    <Connect>
+        <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime">
+            <Parameter name="from" value="Unknown" />
+            <Parameter name="business_id" value="1" />
+            <Parameter name="call_sid" value="unknown" />
+        </Stream>
+    </Connect>
+</Response>"""
+        return Response(content=fallback_twiml, media_type="application/xml")
 
 @router.post("/voice/continue")
 async def continue_call(request: Request, db: Session = Depends(get_db)):
