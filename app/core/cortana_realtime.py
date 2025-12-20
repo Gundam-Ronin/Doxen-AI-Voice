@@ -91,6 +91,7 @@ class RealtimeCallHandler:
         self.call_sid = None
         self.openai_ws = None
         self.openai_ready = asyncio.Event()  # Signals when OpenAI is connected and ready
+        self.stream_ready = asyncio.Event()  # Signals when Twilio stream_sid is received
         self.audio_buffer = []  # Buffer audio until OpenAI is ready
         self.transcripts = []
         self.business_id = business_id or 1
@@ -265,17 +266,18 @@ class RealtimeCallHandler:
             await self.openai_ws.send(json.dumps(session_update))
             print(f"[REALTIME] Session configured for business: {self.business.get('name') if self.business else 'Unknown'}")
             
-            # Wait for stream_sid to be set by receive_from_twilio before sending greeting
-            # This prevents the race condition where audio is sent before Twilio is ready
-            wait_count = 0
-            while not self.stream_sid and wait_count < 50:
-                await asyncio.sleep(0.1)
-                wait_count += 1
-            
-            if not self.stream_sid:
-                print("[REALTIME] WARNING: stream_sid not received after 5 seconds, proceeding anyway")
-            else:
-                print(f"[REALTIME] stream_sid received: {self.stream_sid}")
+            # Wait for stream_sid using proper asyncio.Event synchronization
+            # This is CRITICAL - prevents race condition where audio is sent before Twilio is ready
+            print("[REALTIME] Waiting for stream_ready event from Twilio...")
+            try:
+                await asyncio.wait_for(self.stream_ready.wait(), timeout=10.0)
+                print(f"[REALTIME] stream_ready received! stream_sid: {self.stream_sid}")
+            except asyncio.TimeoutError:
+                print("[REALTIME] ERROR: stream_ready timed out after 10 seconds!")
+                # Still try to proceed but log the error
+                if not self.stream_sid:
+                    print("[REALTIME] CRITICAL: No stream_sid - audio will be dropped!")
+                    return
             
             # Trigger OpenAI to speak first with a greeting
             business_name = self.business.get('name', 'our company') if self.business else 'our company'
@@ -365,6 +367,10 @@ class RealtimeCallHandler:
                     print(f"[TWILIO STREAM] Started - StreamSID: {self.stream_sid}, CallSID: {self.call_sid}")
                     print(f"[TWILIO STREAM] Business: {self.business_id}, Caller: {self.caller_number}")
                     print(f"[TWILIO STREAM] OpenAI ready: {self.openai_ready.is_set()}, OpenAI WS: {bool(self.openai_ws)}")
+                    
+                    # Signal that stream is ready - CRITICAL for synchronization
+                    self.stream_ready.set()
+                    print("[TWILIO STREAM] stream_ready event SET")
                     
                     # Send a mark event to confirm connection is alive
                     try:
