@@ -117,8 +117,19 @@ async def handle_incoming_call(request: Request):
     except Exception as e:
         print(f"[TWILIO VOICE] Error parsing form: {e}")
     
-    # Hardcoded production WebSocket URL - NEVER changes
-    ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
+    # Build WebSocket URL dynamically from request host for production compatibility
+    host = request.headers.get("host", "")
+    x_forwarded_host = request.headers.get("x-forwarded-host", "")
+    actual_host = x_forwarded_host or host or "doxen-ai-voice--doxenstrategy.replit.app"
+    
+    # Strip port if present and ensure clean hostname
+    if ":" in actual_host:
+        actual_host = actual_host.split(":")[0]
+    
+    ws_url = f"wss://{actual_host}/twilio/realtime"
+    
+    print(f"[TWILIO VOICE] Request headers - host: {host}, x-forwarded-host: {x_forwarded_host}")
+    print(f"[TWILIO VOICE] Using WebSocket URL: {ws_url}")
     
     # Return TwiML that connects to the Realtime AI stream
     # business_id=1 is default, actual lookup happens in WebSocket handler
@@ -298,7 +309,18 @@ async def stream_twiml(request: Request):
     except Exception as e:
         print(f"[TWILIO STREAM] Error parsing form: {e}")
     
-    ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
+    # Build WebSocket URL dynamically from request host
+    host = request.headers.get("host", "")
+    x_forwarded_host = request.headers.get("x-forwarded-host", "")
+    actual_host = x_forwarded_host or host or "doxen-ai-voice--doxenstrategy.replit.app"
+    
+    if ":" in actual_host:
+        actual_host = actual_host.split(":")[0]
+    
+    ws_url = f"wss://{actual_host}/twilio/realtime"
+    
+    print(f"[TWILIO STREAM] Request headers - host: {host}, x-forwarded-host: {x_forwarded_host}")
+    print(f"[TWILIO STREAM] Using WebSocket URL: {ws_url}")
     
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
