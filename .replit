@@ -57,5 +57,5 @@ externalPort = 8000
 
 [deployment]
 deploymentTarget = "vm"
-run = ["bash", "-c", "cd frontend && ./node_modules/.bin/serve out -l 5000 & uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+run = ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port"]
 build = ["bash", "-c", "cd frontend && npm ci && npm run build"]
