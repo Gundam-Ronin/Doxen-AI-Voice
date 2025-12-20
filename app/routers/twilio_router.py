@@ -29,7 +29,7 @@ async def test_voice():
 
 @router.get("/diagnose")
 async def diagnose_openai():
-    """Diagnose OpenAI Realtime API connection."""
+    """Diagnose OpenAI Realtime API connection with full audio test."""
     import os
     import websockets as ws_lib
     
@@ -38,6 +38,10 @@ async def diagnose_openai():
         "openai_key_length": len(os.getenv("OPENAI_API_KEY", "")),
         "openai_connection": "not_tested",
         "openai_session": "not_tested",
+        "session_update": "not_tested",
+        "audio_generated": "not_tested",
+        "audio_chunks": 0,
+        "transcript": None,
         "error": None
     }
     
@@ -68,8 +72,58 @@ async def diagnose_openai():
         if data.get("type") == "session.created":
             results["openai_session"] = "created"
             results["session_id"] = data.get("session", {}).get("id", "unknown")
-        else:
-            results["openai_session"] = f"unexpected: {data.get('type')}"
+        
+        # Configure session for audio
+        session_update = {
+            "type": "session.update",
+            "session": {
+                "modalities": ["text", "audio"],
+                "voice": "alloy",
+                "instructions": "You are a helpful assistant. Say hello briefly.",
+                "input_audio_format": "g711_ulaw",
+                "output_audio_format": "g711_ulaw",
+                "turn_detection": {"type": "server_vad"}
+            }
+        }
+        await openai_ws.send(json.dumps(session_update))
+        
+        # Trigger a response
+        trigger = {
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Say hello in one sentence."}]
+            }
+        }
+        await openai_ws.send(json.dumps(trigger))
+        await openai_ws.send(json.dumps({"type": "response.create", "response": {"modalities": ["text", "audio"]}}))
+        
+        # Collect responses
+        audio_chunks = 0
+        transcript = None
+        deadline = asyncio.get_event_loop().time() + 10
+        
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                msg = await asyncio.wait_for(openai_ws.recv(), timeout=2)
+                data = json.loads(msg)
+                msg_type = data.get("type", "")
+                
+                if msg_type == "session.updated":
+                    results["session_update"] = "success"
+                elif msg_type == "response.audio.delta":
+                    audio_chunks += 1
+                elif msg_type == "response.audio_transcript.done":
+                    transcript = data.get("transcript", "")
+                elif msg_type == "response.done":
+                    break
+            except asyncio.TimeoutError:
+                break
+        
+        results["audio_chunks"] = audio_chunks
+        results["audio_generated"] = "yes" if audio_chunks > 0 else "no"
+        results["transcript"] = transcript
         
         await openai_ws.close()
     except asyncio.TimeoutError:

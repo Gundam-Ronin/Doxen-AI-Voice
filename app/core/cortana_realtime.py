@@ -443,7 +443,10 @@ class RealtimeCallHandler:
                 elif response_type == "response.audio.delta":
                     audio_chunk_count += 1
                     if audio_chunk_count == 1:
-                        print(f"[OPENAI] Receiving audio from AI...")
+                        print(f"[OPENAI] Receiving audio from AI (stream_sid: {self.stream_sid})...")
+                    if audio_chunk_count <= 3:
+                        delta_len = len(response.get("delta", ""))
+                        print(f"[OPENAI] Audio chunk {audio_chunk_count}: {delta_len} bytes")
                     if self.stream_sid:
                         audio_delta = {
                             "event": "media",
@@ -454,9 +457,14 @@ class RealtimeCallHandler:
                         }
                         try:
                             await self.websocket.send_text(json.dumps(audio_delta))
+                            if audio_chunk_count == 1:
+                                print(f"[OPENAI] First audio chunk sent to Twilio successfully")
                         except Exception as e:
                             print(f"[REALTIME] Error sending audio to Twilio: {e}")
                             break
+                    else:
+                        if audio_chunk_count == 1:
+                            print(f"[OPENAI] WARNING: stream_sid is None, audio dropped!")
                 
                 elif response_type == "response.audio.done":
                     print(f"[OPENAI] Audio response complete ({audio_chunk_count} chunks sent)")
