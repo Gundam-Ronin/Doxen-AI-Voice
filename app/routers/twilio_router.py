@@ -27,6 +27,58 @@ async def test_voice():
 </Response>"""
     return Response(content=twiml, media_type="application/xml")
 
+@router.get("/diagnose")
+async def diagnose_openai():
+    """Diagnose OpenAI Realtime API connection."""
+    import os
+    import websockets as ws_lib
+    
+    results = {
+        "openai_key_present": bool(os.getenv("OPENAI_API_KEY")),
+        "openai_key_length": len(os.getenv("OPENAI_API_KEY", "")),
+        "openai_connection": "not_tested",
+        "openai_session": "not_tested",
+        "error": None
+    }
+    
+    openai_url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
+    api_key = os.getenv("OPENAI_API_KEY")
+    
+    if not api_key:
+        results["error"] = "OPENAI_API_KEY not set"
+        return results
+    
+    try:
+        openai_ws = await asyncio.wait_for(
+            ws_lib.connect(
+                openai_url,
+                additional_headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "OpenAI-Beta": "realtime=v1"
+                },
+                open_timeout=10
+            ),
+            timeout=15
+        )
+        results["openai_connection"] = "success"
+        
+        # Wait for session.created
+        msg = await asyncio.wait_for(openai_ws.recv(), timeout=5)
+        data = json.loads(msg)
+        if data.get("type") == "session.created":
+            results["openai_session"] = "created"
+            results["session_id"] = data.get("session", {}).get("id", "unknown")
+        else:
+            results["openai_session"] = f"unexpected: {data.get('type')}"
+        
+        await openai_ws.close()
+    except asyncio.TimeoutError:
+        results["error"] = "OpenAI connection timeout"
+    except Exception as e:
+        results["error"] = f"{type(e).__name__}: {str(e)}"
+    
+    return results
+
 @router.post("/stream-test")
 async def stream_test_twiml(request: Request):
     """Test endpoint with stream - just plays a message, no OpenAI."""
