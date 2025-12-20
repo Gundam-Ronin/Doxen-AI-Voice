@@ -100,48 +100,55 @@ def generate_twiml_response(message: str, gather: bool = True) -> str:
 
 @router.post("/voice")
 async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
+    """Main voice webhook - returns TwiML to connect to Realtime AI stream."""
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "")
     from_number = form_data.get("From", "")
     to_number = form_data.get("To", "")
+    
+    print(f"[TWILIO VOICE] Incoming call from {from_number}, CallSID: {call_sid}")
     
     business = db.query(Business).filter(Business.phone_number == to_number).first()
     
     if not business:
         business = db.query(Business).first()
     
-    if not business:
-        twiml = generate_twiml_response(
-            "Thank you for calling. We're currently not set up to take calls. Please try again later.",
-            gather=False
+    business_id = business.id if business else 1
+    business_name = business.name if business else "our company"
+    
+    # Track the call
+    try:
+        call_manager.start_call(call_sid, business_id, from_number)
+        
+        active_call = ActiveCall(
+            call_sid=call_sid,
+            business_id=business_id,
+            caller_number=from_number,
+            status="in_progress"
         )
-        return Response(content=twiml, media_type="application/xml")
+        db.add(active_call)
+        db.commit()
+    except Exception as e:
+        print(f"[TWILIO VOICE] Error tracking call: {e}")
     
-    routing = routing_manager.get_routing_decision(
-        business_hours=business.hours if business.hours else None,
-        is_emergency=False,
-        has_available_tech=True
-    )
+    # Use hardcoded production URL for the WebSocket stream
+    ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
     
-    call_manager.start_call(call_sid, business.id, from_number)
+    # Return TwiML that connects to the Realtime AI stream
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">Thank you for calling {business_name}. Please hold while I connect you to our AI assistant.</Say>
+    <Connect>
+        <Stream url="{ws_url}">
+            <Parameter name="from" value="{from_number}" />
+            <Parameter name="business_id" value="{business_id}" />
+            <Parameter name="call_sid" value="{call_sid}" />
+        </Stream>
+    </Connect>
+    <Say voice="Polly.Joanna">I apologize, but we're experiencing technical difficulties. Please try calling back later.</Say>
+</Response>"""
     
-    active_call = ActiveCall(
-        call_sid=call_sid,
-        business_id=business.id,
-        caller_number=from_number,
-        status="in_progress"
-    )
-    db.add(active_call)
-    db.commit()
-    
-    if routing["route"] == "after_hours":
-        greeting = routing["message"]
-    else:
-        greeting = f"Thank you for calling {business.name}! I'm Cortana, your AI assistant. How can I help you today?"
-    
-    call_manager.add_transcript(call_sid, "cortana", greeting)
-    
-    twiml = generate_twiml_response(greeting)
+    print(f"[TWILIO VOICE] Returning TwiML with stream URL: {ws_url}")
     return Response(content=twiml, media_type="application/xml")
 
 @router.post("/voice/continue")
