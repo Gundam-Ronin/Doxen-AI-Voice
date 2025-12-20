@@ -362,7 +362,17 @@ class RealtimeCallHandler:
                         except:
                             pass
                     
-                    print(f"Twilio stream started: {self.stream_sid}, Call SID: {self.call_sid}, Business: {self.business_id}")
+                    print(f"[TWILIO STREAM] Started - StreamSID: {self.stream_sid}, CallSID: {self.call_sid}")
+                    print(f"[TWILIO STREAM] Business: {self.business_id}, Caller: {self.caller_number}")
+                    print(f"[TWILIO STREAM] OpenAI ready: {self.openai_ready.is_set()}, OpenAI WS: {bool(self.openai_ws)}")
+                    
+                    # Send a mark event to confirm connection is alive
+                    try:
+                        mark = {"event": "mark", "streamSid": self.stream_sid, "mark": {"name": "connected"}}
+                        await self.websocket.send_text(json.dumps(mark))
+                        print("[TWILIO STREAM] Sent connection mark to Twilio")
+                    except Exception as e:
+                        print(f"[TWILIO STREAM] Error sending mark: {e}")
                     
                     call_manager.start_call(self.call_sid, self.business_id, self.caller_number)
                     
