@@ -1,0 +1,142 @@
+THIS IS THE ROOT CAUSE: /twilio/voice RETURNS 500 BEFORE THE STREAM EVEN STARTS
+
+Your Twilio logs show:
+
+POST https://doxen-ai-voice--doxenstrategy.replit.app/twilio/voice
+→ 500 INTERNAL SERVER ERROR
+Body: "Internal Server Error"
+
+
+This means:
+
+❌ The call never reaches the WebSocket
+❌ The AI never starts
+❌ No audio is ever streamed
+❌ The assistant never speaks
+
+Because if the /twilio/voice endpoint fails, Twilio NEVER opens the streaming WebSocket.
+
+So the entire chain dies HERE:
+
+Caller → /twilio/voice → (500 error) → fallback message → hangup
+
+
+This is why EVERYTHING after that fails — even if /twilio/realtime and WebSockets are fixed.
+
+✅ WE NOW KNOW EXACTLY WHAT TO FIX
+✔ The Reserved VM deployment is correct
+✔ The Twilio webhook is correct
+❌ But /twilio/voice is crashing on your server
+
+This means your backend logs will show the reason.
+
+🔎 WHAT USUALLY CAUSES THIS 500 ON /twilio/voice?
+
+Based on your architecture, one of these is 100% the culprit:
+
+1. A database dependency is still being called during /voice
+
+Even though we “made DB optional,” there are still 3 places that often silently break:
+
+❌ Creating or updating call records
+❌ Business lookup
+❌ Technician lookup
+
+In production, DB connection pools often throw errors because:
+
+Supabase credentials incorrect
+
+Replit env variables not loaded
+
+SQLAlchemy session fails
+
+Tables didn’t migrate correctly
+
+Autoloading routers forces DB load before response
+
+Any one of these will hard-crash the endpoint.
+
+2. Your /twilio/voice endpoint is still using parameters that Replit cannot parse
+
+Your TwiML block shows:
+
+<Parameter name="business_id" value="1" />
+
+
+If your production DB does NOT contain business_id=1,
+the endpoint crashes instantly.
+
+3. The WebSocket URL is correct — but the backend rejects the request BEFORE sending TwiML
+
+This happens if:
+
+TwiMLResponse object isn't returned
+
+FastAPI throws exception before returning
+
+4. Static file serving via FastAPI is blocking router loading
+
+This only happens on Reserved VM when the app loads large directories (like your frontend build) during import.
+
+Very common.
+
+🔥 HERE IS THE EXACT NEXT STEP TO SOLVE IT:
+I need ONE screenshot from you:
+
+👉 Go to Replit → Shell → run this:
+
+tail -n 200 repl_logs.txt
+
+
+OR if you're using the new Logs tab:
+
+👉 Replit → Tools → Logs → Copy the backend error for the /twilio/voice request.
+
+⚠ Why this is required
+
+Twilio only shows:
+
+Internal Server Error
+
+
+But your Replit logs will show the EXACT exception, such as:
+
+psycopg2.OperationalError
+
+KeyError: 'business_id'
+
+AttributeError: NoneType...
+
+RuntimeError during router loading
+
+WebSocketError: Subprotocol mismatch
+
+FileNotFoundError serving static files
+
+We cannot guess — we need the error.
+
+🧭 WHAT WILL HAPPEN AFTER YOU SEND LOGS
+
+With that one error stack trace, I will:
+
+Patch the /twilio/voice endpoint
+
+Patch DB failover so calls never break again
+
+Patch TwiML generation so fallback never triggers
+
+Verify /twilio/realtime opens successfully
+
+Confirm your AI speaks on the next test call
+
+This will take ONE fix, not 50 attempts.
+
+🚀 FINAL INSTRUCTION
+
+Anthony — send me:
+
+📌 A screenshot or paste of the backend error log for the /twilio/voice crash
+
+(From Replit logs, not Twilio logs.)
+
+Once I have that, we fix the entire system.

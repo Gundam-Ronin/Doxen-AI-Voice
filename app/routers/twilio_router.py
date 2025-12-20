@@ -99,87 +99,44 @@ def generate_twiml_response(message: str, gather: bool = True) -> str:
 </Response>"""
 
 @router.post("/voice")
-async def handle_incoming_call(request: Request, db: Session = Depends(get_db_optional)):
-    """Main voice webhook - returns TwiML to connect to Realtime AI stream."""
+async def handle_incoming_call(request: Request):
+    """Main voice webhook - returns TwiML to connect to Realtime AI stream.
+    
+    CRITICAL: This endpoint has ZERO dependencies to ensure it NEVER fails.
+    All database operations are deferred to the WebSocket handler.
+    """
+    # Parse form data with fallbacks
+    call_sid = "unknown"
+    from_number = "Unknown"
+    
     try:
         form_data = await request.form()
         call_sid = form_data.get("CallSid", "unknown")
         from_number = form_data.get("From", "Unknown")
-        to_number = form_data.get("To", "")
-        
         print(f"[TWILIO VOICE] Incoming call from {from_number}, CallSID: {call_sid}")
-        
-        business_id = 1
-        business_name = "our company"
-        
-        if db:
-            try:
-                business = db.query(Business).filter(Business.phone_number == to_number).first()
-                if not business:
-                    business = db.query(Business).first()
-                if business:
-                    business_id = business.id
-                    business_name = business.name
-            except Exception as db_err:
-                print(f"[TWILIO VOICE] Database query error: {db_err}")
-        
-        # Track the call (non-blocking)
-        try:
-            call_manager.start_call(call_sid, business_id, from_number)
-            
-            if db:
-                active_call = ActiveCall(
-                    call_sid=call_sid,
-                    business_id=business_id,
-                    caller_number=from_number,
-                    status="in_progress"
-                )
-                db.add(active_call)
-                db.commit()
-        except Exception as e:
-            print(f"[TWILIO VOICE] Error tracking call: {e}")
-            if db:
-                try:
-                    db.rollback()
-                except:
-                    pass
-        
-        # Use hardcoded production URL for the WebSocket stream
-        ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
-        
-        # Return TwiML that connects to the Realtime AI stream
-        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+    except Exception as e:
+        print(f"[TWILIO VOICE] Error parsing form: {e}")
+    
+    # Hardcoded production WebSocket URL - NEVER changes
+    ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
+    
+    # Return TwiML that connects to the Realtime AI stream
+    # business_id=1 is default, actual lookup happens in WebSocket handler
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">Thank you for calling {business_name}. Please hold while I connect you to our AI assistant.</Say>
+    <Say voice="Polly.Joanna">Thank you for calling. Please hold while I connect you to our AI assistant.</Say>
     <Connect>
         <Stream url="{ws_url}">
             <Parameter name="from" value="{from_number}" />
-            <Parameter name="business_id" value="{business_id}" />
+            <Parameter name="business_id" value="1" />
             <Parameter name="call_sid" value="{call_sid}" />
         </Stream>
     </Connect>
     <Say voice="Polly.Joanna">I apologize, but we're experiencing technical difficulties. Please try calling back later.</Say>
 </Response>"""
-        
-        print(f"[TWILIO VOICE] Returning TwiML with stream URL: {ws_url}")
-        return Response(content=twiml, media_type="application/xml")
-    except Exception as e:
-        print(f"[TWILIO VOICE] Critical error: {e}")
-        import traceback
-        traceback.print_exc()
-        # Return basic TwiML even on error
-        fallback_twiml = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Joanna">Thank you for calling. Please hold while I connect you.</Say>
-    <Connect>
-        <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime">
-            <Parameter name="from" value="Unknown" />
-            <Parameter name="business_id" value="1" />
-            <Parameter name="call_sid" value="unknown" />
-        </Stream>
-    </Connect>
-</Response>"""
-        return Response(content=fallback_twiml, media_type="application/xml")
+    
+    print(f"[TWILIO VOICE] Returning TwiML with stream URL: {ws_url}")
+    return Response(content=twiml, media_type="application/xml")
 
 @router.post("/voice/continue")
 async def continue_call(request: Request, db: Session = Depends(get_db)):
@@ -325,54 +282,39 @@ async def handle_sms(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/stream")
-async def stream_twiml(request: Request, db: Session = Depends(get_db_optional)):
+async def stream_twiml(request: Request):
+    """Alternative webhook endpoint - identical to /voice but kept for compatibility.
+    
+    CRITICAL: This endpoint has ZERO dependencies to ensure it NEVER fails.
+    """
+    call_sid = "unknown"
+    from_number = "Unknown"
+    
     try:
         form_data = await request.form()
         from_number = form_data.get("From", "Unknown")
-        to_number = form_data.get("To", "")
-        call_sid = form_data.get("CallSid", "")
-        
-        business_id = 1
-        try:
-            business = db.query(Business).filter(Business.phone_number == to_number).first()
-            if not business:
-                business = db.query(Business).first()
-            business_id = business.id if business else 1
-        except Exception as db_err:
-            print(f"[TWILIO STREAM] Database error: {db_err}")
-        
-        # Use hardcoded production URL to avoid any host header issues
-        ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
-        
-        print(f"[TWILIO STREAM] Call from {from_number}, CallSID: {call_sid}, Business: {business_id}")
-        
-        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+        call_sid = form_data.get("CallSid", "unknown")
+        print(f"[TWILIO STREAM] Call from {from_number}, CallSID: {call_sid}")
+    except Exception as e:
+        print(f"[TWILIO STREAM] Error parsing form: {e}")
+    
+    ws_url = "wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime"
+    
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">Thank you for calling. Please hold while I connect you to our AI assistant.</Say>
     <Connect>
         <Stream url="{ws_url}">
             <Parameter name="from" value="{from_number}" />
-            <Parameter name="business_id" value="{business_id}" />
+            <Parameter name="business_id" value="1" />
             <Parameter name="call_sid" value="{call_sid}" />
         </Stream>
     </Connect>
-    <Say voice="Polly.Joanna">I apologize, but we're experiencing technical difficulties. Please try calling back later or leave a message.</Say>
+    <Say voice="Polly.Joanna">I apologize, but we're experiencing technical difficulties. Please try calling back later.</Say>
 </Response>"""
-        return Response(content=twiml, media_type="application/xml")
-    except Exception as e:
-        print(f"[TWILIO STREAM] Error: {e}")
-        error_twiml = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say>Thank you for calling. Please hold while we connect you.</Say>
-    <Connect>
-        <Stream url="wss://doxen-ai-voice--doxenstrategy.replit.app/twilio/realtime">
-            <Parameter name="from" value="Unknown" />
-            <Parameter name="business_id" value="1" />
-            <Parameter name="call_sid" value="unknown" />
-        </Stream>
-    </Connect>
-</Response>"""
-        return Response(content=error_twiml, media_type="application/xml")
+    
+    print(f"[TWILIO STREAM] Returning TwiML with stream URL: {ws_url}")
+    return Response(content=twiml, media_type="application/xml")
 
 
 @router.websocket("/realtime")
