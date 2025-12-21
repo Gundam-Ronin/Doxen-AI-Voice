@@ -133,6 +133,149 @@ async def diagnose_openai():
     
     return results
 
+@router.get("/diagnose-handler")
+async def diagnose_handler():
+    """Test the full handler flow with simulated Twilio events."""
+    import os
+    import websockets as ws_lib
+    
+    results = {
+        "step": "initializing",
+        "timeline": [],
+        "openai_connected": False,
+        "session_created": False,
+        "session_updated": False,
+        "initial_greeting_sent": False,
+        "response_requested": False,
+        "audio_chunks": 0,
+        "stream_sid": "test_stream_123",
+        "error": None
+    }
+    
+    def log(msg):
+        results["timeline"].append(f"{msg}")
+        print(f"[DIAGNOSE-HANDLER] {msg}")
+    
+    openai_url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
+    api_key = os.getenv("OPENAI_API_KEY")
+    
+    if not api_key:
+        results["error"] = "No API key"
+        return results
+    
+    try:
+        log("Connecting to OpenAI...")
+        openai_ws = await asyncio.wait_for(
+            ws_lib.connect(
+                openai_url,
+                additional_headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "OpenAI-Beta": "realtime=v1"
+                },
+                open_timeout=10
+            ),
+            timeout=15
+        )
+        results["openai_connected"] = True
+        log("OpenAI connected")
+        
+        # Wait for session.created
+        msg = await asyncio.wait_for(openai_ws.recv(), timeout=5)
+        data = json.loads(msg)
+        if data.get("type") == "session.created":
+            results["session_created"] = True
+            log("session.created received")
+        
+        # Send session.update (just like the real handler)
+        await openai_ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "modalities": ["text", "audio"],
+                "voice": "alloy",
+                "instructions": "You are a helpful assistant. Say hello briefly.",
+                "input_audio_format": "g711_ulaw",
+                "output_audio_format": "g711_ulaw",
+                "input_audio_transcription": {"model": "whisper-1"},
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.5,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 500
+                }
+            }
+        }))
+        log("session.update sent")
+        
+        # Wait for session.updated
+        deadline = asyncio.get_event_loop().time() + 3
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                msg = await asyncio.wait_for(openai_ws.recv(), timeout=1)
+                data = json.loads(msg)
+                if data.get("type") == "session.updated":
+                    results["session_updated"] = True
+                    log("session.updated received")
+                    break
+            except asyncio.TimeoutError:
+                break
+        
+        # Now send the initial greeting (like the real handler does)
+        await openai_ws.send(json.dumps({
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "A customer just called. Greet them warmly."}]
+            }
+        }))
+        results["initial_greeting_sent"] = True
+        log("Initial greeting trigger sent")
+        
+        await openai_ws.send(json.dumps({
+            "type": "response.create",
+            "response": {"modalities": ["text", "audio"]}
+        }))
+        results["response_requested"] = True
+        log("response.create sent")
+        
+        # Collect audio
+        deadline = asyncio.get_event_loop().time() + 12
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                msg = await asyncio.wait_for(openai_ws.recv(), timeout=2)
+                data = json.loads(msg)
+                msg_type = data.get("type", "")
+                
+                if msg_type == "response.audio.delta":
+                    results["audio_chunks"] += 1
+                    if results["audio_chunks"] == 1:
+                        log("First audio chunk received")
+                elif msg_type == "response.audio.done":
+                    log(f"Audio complete: {results['audio_chunks']} chunks")
+                elif msg_type == "response.done":
+                    status = data.get("response", {}).get("status", "unknown")
+                    log(f"Response done, status={status}")
+                    break
+                elif msg_type == "error":
+                    err = data.get("error", {})
+                    log(f"ERROR: {err.get('message', err)}")
+                    results["error"] = str(err)
+                    break
+            except asyncio.TimeoutError:
+                log("Timeout waiting for more messages")
+                break
+        
+        await openai_ws.close()
+        results["step"] = "completed"
+        log(f"Final audio chunks: {results['audio_chunks']}")
+        
+    except Exception as e:
+        results["error"] = f"{type(e).__name__}: {e}"
+        results["step"] = "failed"
+        log(f"Error: {results['error']}")
+    
+    return results
+
 @router.get("/diagnose-concurrent")
 async def diagnose_concurrent():
     """Test if concurrent WebSocket + OpenAI connection works."""
