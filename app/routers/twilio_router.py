@@ -431,6 +431,145 @@ async def realtime_test(ws: WebSocket):
     finally:
         print("[REALTIME-TEST] Handler finished")
 
+@router.websocket("/realtime-debug")
+async def realtime_debug(ws: WebSocket):
+    """Debug WebSocket that traces the full OpenAI flow and reports via mark events."""
+    import os
+    import websockets as ws_lib
+    
+    requested_protocol = ws.headers.get("sec-websocket-protocol", "")
+    if "audio.twilio.com" in requested_protocol:
+        await ws.accept(subprotocol="audio.twilio.com")
+    else:
+        await ws.accept()
+    
+    stream_sid = None
+    
+    async def send_debug(msg: str):
+        nonlocal stream_sid
+        if stream_sid:
+            try:
+                await ws.send_text(json.dumps({
+                    "event": "mark",
+                    "streamSid": stream_sid,
+                    "mark": {"name": f"DEBUG:{msg}"}
+                }))
+            except:
+                pass
+    
+    try:
+        # Wait for start event
+        data = await ws.receive_text()
+        msg = json.loads(data)
+        
+        if msg.get("event") == "start":
+            stream_sid = msg["start"]["streamSid"]
+            await send_debug("start_received")
+        
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            await send_debug("NO_API_KEY")
+            await ws.close()
+            return
+        
+        await send_debug("connecting_openai")
+        
+        try:
+            openai_ws = await asyncio.wait_for(
+                ws_lib.connect(
+                    "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
+                    additional_headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "OpenAI-Beta": "realtime=v1"
+                    },
+                    open_timeout=10
+                ),
+                timeout=15
+            )
+            await send_debug("openai_connected")
+        except Exception as e:
+            await send_debug(f"openai_error:{type(e).__name__}")
+            await ws.close()
+            return
+        
+        # Wait for session.created
+        msg = await asyncio.wait_for(openai_ws.recv(), timeout=5)
+        data = json.loads(msg)
+        if data.get("type") == "session.created":
+            await send_debug("session_created")
+        
+        # Configure session
+        await openai_ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "modalities": ["text", "audio"],
+                "voice": "alloy",
+                "instructions": "Say hello briefly.",
+                "input_audio_format": "g711_ulaw",
+                "output_audio_format": "g711_ulaw"
+            }
+        }))
+        await send_debug("session_update_sent")
+        
+        # Wait for session.updated
+        deadline = asyncio.get_event_loop().time() + 3
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                msg = await asyncio.wait_for(openai_ws.recv(), timeout=1)
+                data = json.loads(msg)
+                if data.get("type") == "session.updated":
+                    await send_debug("session_updated")
+                    break
+            except asyncio.TimeoutError:
+                break
+        
+        # Trigger greeting
+        await openai_ws.send(json.dumps({
+            "type": "conversation.item.create",
+            "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
+        }))
+        await openai_ws.send(json.dumps({"type": "response.create", "response": {"modalities": ["text", "audio"]}}))
+        await send_debug("response_requested")
+        
+        # Forward audio from OpenAI to client
+        audio_count = 0
+        deadline = asyncio.get_event_loop().time() + 12
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                msg = await asyncio.wait_for(openai_ws.recv(), timeout=2)
+                data = json.loads(msg)
+                msg_type = data.get("type", "")
+                
+                if msg_type == "response.audio.delta":
+                    audio_count += 1
+                    if audio_count == 1:
+                        await send_debug("first_audio")
+                    # Forward audio to client
+                    await ws.send_text(json.dumps({
+                        "event": "media",
+                        "streamSid": stream_sid,
+                        "media": {"payload": data.get("delta", "")}
+                    }))
+                elif msg_type == "response.done":
+                    await send_debug(f"done:{audio_count}_chunks")
+                    break
+                elif msg_type == "error":
+                    await send_debug(f"openai_err:{data.get('error', {}).get('message', 'unknown')[:30]}")
+                    break
+            except asyncio.TimeoutError:
+                await send_debug("recv_timeout")
+                break
+        
+        await openai_ws.close()
+        await ws.close()
+        
+    except Exception as e:
+        await send_debug(f"error:{type(e).__name__}")
+        try:
+            await ws.close()
+        except:
+            pass
+
 def generate_twiml_response(message: str, gather: bool = True) -> str:
     if gather:
         return f"""<?xml version="1.0" encoding="UTF-8"?>
