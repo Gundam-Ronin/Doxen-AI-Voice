@@ -280,6 +280,7 @@ class RealtimeCallHandler:
                     return
             
             # Trigger OpenAI to speak first with a greeting
+            print(f"[REALTIME] About to trigger OpenAI greeting. stream_sid={self.stream_sid}, receive_task running={not receive_task.done()}")
             business_name = self.business.get('name', 'our company') if self.business else 'our company'
             initial_message = {
                 "type": "conversation.item.create",
@@ -429,10 +430,15 @@ class RealtimeCallHandler:
             return
         
         print("[REALTIME] Starting to receive from OpenAI...")
+        print(f"[REALTIME] OpenAI WS state: open={not self.openai_ws.closed if hasattr(self.openai_ws, 'closed') else 'unknown'}")
         audio_chunk_count = 0
+        message_count = 0
         
         try:
             async for message in self.openai_ws:
+                message_count += 1
+                if message_count <= 5:
+                    print(f"[OPENAI] Received message #{message_count}")
                 response = json.loads(message)
                 response_type = response.get("type", "unknown")
                 
