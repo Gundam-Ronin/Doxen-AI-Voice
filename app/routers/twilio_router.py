@@ -133,6 +133,105 @@ async def diagnose_openai():
     
     return results
 
+@router.get("/diagnose-concurrent")
+async def diagnose_concurrent():
+    """Test if concurrent WebSocket + OpenAI connection works."""
+    import os
+    import websockets as ws_lib
+    
+    results = {
+        "step": "starting",
+        "openai_connected": False,
+        "openai_session": False,
+        "asyncio_gather_test": False,
+        "audio_chunks": 0,
+        "error": None
+    }
+    
+    openai_url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
+    api_key = os.getenv("OPENAI_API_KEY")
+    
+    if not api_key:
+        results["error"] = "No API key"
+        return results
+    
+    async def task1():
+        """Simulates Twilio receiver task."""
+        await asyncio.sleep(0.5)
+        return "task1_done"
+    
+    async def task2():
+        """Simulates OpenAI connection and audio generation."""
+        nonlocal results
+        try:
+            openai_ws = await asyncio.wait_for(
+                ws_lib.connect(
+                    openai_url,
+                    additional_headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "OpenAI-Beta": "realtime=v1"
+                    },
+                    open_timeout=10
+                ),
+                timeout=15
+            )
+            results["openai_connected"] = True
+            
+            # Wait for session.created
+            msg = await asyncio.wait_for(openai_ws.recv(), timeout=5)
+            data = json.loads(msg)
+            if data.get("type") == "session.created":
+                results["openai_session"] = True
+            
+            # Configure and trigger response
+            await openai_ws.send(json.dumps({
+                "type": "session.update",
+                "session": {
+                    "modalities": ["text", "audio"],
+                    "voice": "alloy",
+                    "instructions": "Say hello briefly.",
+                    "input_audio_format": "g711_ulaw",
+                    "output_audio_format": "g711_ulaw"
+                }
+            }))
+            
+            await openai_ws.send(json.dumps({
+                "type": "conversation.item.create",
+                "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
+            }))
+            await openai_ws.send(json.dumps({"type": "response.create", "response": {"modalities": ["text", "audio"]}}))
+            
+            # Collect audio
+            deadline = asyncio.get_event_loop().time() + 10
+            while asyncio.get_event_loop().time() < deadline:
+                try:
+                    msg = await asyncio.wait_for(openai_ws.recv(), timeout=2)
+                    data = json.loads(msg)
+                    if data.get("type") == "response.audio.delta":
+                        results["audio_chunks"] += 1
+                    elif data.get("type") == "response.done":
+                        break
+                except asyncio.TimeoutError:
+                    break
+            
+            await openai_ws.close()
+            return "task2_done"
+        except Exception as e:
+            results["error"] = f"task2: {type(e).__name__}: {e}"
+            return "task2_failed"
+    
+    try:
+        results["step"] = "running_gather"
+        result = await asyncio.gather(task1(), task2())
+        results["asyncio_gather_test"] = True
+        results["gather_results"] = result
+        results["step"] = "completed"
+    except Exception as e:
+        results["error"] = f"gather: {type(e).__name__}: {e}"
+        results["step"] = "failed"
+    
+    return results
+
 @router.post("/stream-test")
 async def stream_test_twiml(request: Request):
     """Test endpoint with stream - just plays a message, no OpenAI."""
