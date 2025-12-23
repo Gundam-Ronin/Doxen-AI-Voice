@@ -3,9 +3,5 @@ uvicorn==0.29.0
 python-dotenv==1.0.1
 requests==2.31.0
 websockets==12.0
-
-# Pydantic (Python-only builds)
 pydantic==2.6.4
-
-
 SQLAlchemy==1.4.51
