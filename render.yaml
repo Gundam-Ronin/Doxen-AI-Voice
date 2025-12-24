@@ -1,17 +1,12 @@
-# Render Blueprint Specification
 version: "1"
 
 services:
   - type: web
     name: doxen-ai-voice
     env: python
-
-    # ----------------------------
-    # Critical Fix: Python Version
-    # ----------------------------
-   
-    plan: starter
+    pythonVersion: 3.10.13
     region: oregon
+    plan: starter
 
     buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
     startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
@@ -25,6 +20,3 @@ services:
         sync: false
       - key: ASSISTANT_PHONE_NUMBER
         sync: false
-      # You can add Mailchimp later:
-      # - key: MAILCHIMP_API_KEY
-      #   sync: false
