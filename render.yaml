@@ -4,7 +4,6 @@ services:
   - type: web
     name: doxen-ai-voice
     env: python
-    pythonVersion: 3.10.13
     region: oregon
     plan: starter
 
