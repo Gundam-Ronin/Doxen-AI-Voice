@@ -9,8 +9,7 @@ services:
     # ----------------------------
     # Critical Fix: Python Version
     # ----------------------------
-    pythonVersion: 3.10
-
+   
     plan: starter
     region: oregon
 
