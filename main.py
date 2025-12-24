@@ -1,6 +1,7 @@
-def main():
-    print("Hello from repl-nix-workspace!")
+from fastapi import FastAPI
 
+app = FastAPI()
 
-if __name__ == "__main__":
-    main()
+@app.get("/")
+def home():
+    return {"message": "Doxen AI Voice API is running!"}
