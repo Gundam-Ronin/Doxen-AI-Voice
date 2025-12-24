@@ -1,25 +1,31 @@
-# Exported from Render on 2025-12-24T03:45:17Z
+# Render Blueprint Specification
 version: "1"
-projects:
-- name: My project
-  environments:
-  - name: Production
-    services:
-    - type: web
-      name: Doxen-AI-Voice
-      runtime: python
-      repo: https://github.com/Gundam-Ronin/Doxen-AI-Voice
-      plan: free
-      envVars:
-      - key: ASSISTANT_PHONE_NUMBER
+
+services:
+  - type: web
+    name: doxen-ai-voice
+    env: python
+
+    # ----------------------------
+    # Critical Fix: Python Version
+    # ----------------------------
+    pythonVersion: 3.10
+
+    plan: starter
+    region: oregon
+
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+
+    envVars:
+      - key: OPENAI_API_KEY
         sync: false
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
-      - key: OPENAI_API_KEY
+      - key: ASSISTANT_PHONE_NUMBER
         sync: false
-      region: virginia
-      buildCommand: pip install -r requirements.txt
-      startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-      autoDeployTrigger: commit
+      # You can add Mailchimp later:
+      # - key: MAILCHIMP_API_KEY
+      #   sync: false
