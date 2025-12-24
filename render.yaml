@@ -1,5 +1,8 @@
 version: "1"
 
+build:
+  runtime: python3.10
+
 services:
   - type: web
     name: doxen-ai-voice
