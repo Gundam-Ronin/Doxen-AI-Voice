@@ -3,7 +3,7 @@ version: "1"
 services:
   - type: web
     name: doxen-ai-voice
-    env: python
+    runtime: python3.10
     region: oregon
     plan: starter
 
