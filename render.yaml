@@ -3,9 +3,9 @@ version: "1"
 services:
   - type: web
     name: doxen-ai-voice
+    env: docker
     region: oregon
     plan: starter
-    env: docker
 
     buildCommand: "docker build -t doxen-ai-voice ."
     startCommand: "docker run -p $PORT:10000 doxen-ai-voice"
