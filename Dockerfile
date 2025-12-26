@@ -1,30 +1,55 @@
-# Use official Python image
-FROM python:3.10-slim
+# ============================================================
+# 1. BASE BACKEND IMAGE
+# ============================================================
+FROM python:3.10-slim AS backend
 
-# Prevent Python buffering (better logging)
 ENV PYTHONUNBUFFERED=1
-
-# Create working directory
 WORKDIR /app
 
-# Install system dependencies required for pydantic-core
+# Install system deps for pydantic-core
 RUN apt-get update && apt-get install -y \
-        build-essential \
-        cargo \
+    build-essential \
+    cargo \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency list first (better caching)
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy entire project into the image
 COPY . .
 
-# Expose the port Render will map
+# ============================================================
+# 2. FRONTEND BUILD STAGE (Next.js or Vite)
+# ============================================================
+FROM node:18-alpine AS frontend
+
+WORKDIR /frontend
+
+# Copy frontend folder only
+COPY frontend/package*.json ./
+RUN npm install
+
+COPY frontend/ .
+
+# Build frontend (Next.js exports to /frontend/out)
+RUN npm run build
+
+# ============================================================
+# 3. FINAL COMBINED IMAGE
+# ============================================================
+FROM python:3.10-slim
+
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+# Copy backend from stage 1
+COPY --from=backend /app /app
+
+# Copy frontend static build output into backend
+COPY --from=frontend /frontend/out /app/frontend/out
+
+# Expose Render port
 EXPOSE 10000
 
-# Start the application
+# Start FastAPI app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]
